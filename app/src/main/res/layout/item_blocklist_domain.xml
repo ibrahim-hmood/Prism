@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/domainText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="@color/prism_text_primary"
+        android:textSize="15sp" />
+
+    <!-- Plus icon used for remove since no custom drawables added, rotated 45deg programmatically if needed, or simply "X" text -->
+    <ImageButton
+        android:id="@+id/removeDomainBtn"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Remove domain"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        app:tint="@color/prism_text_muted" />
+</LinearLayout>

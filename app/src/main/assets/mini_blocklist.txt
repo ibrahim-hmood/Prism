@@ -1,0 +1,10 @@
+# Minimal seed list (hosts-style). Full list is merged from StevenBlack hosts at runtime.
+0.0.0.0 doubleclick.net
+0.0.0.0 googleadservices.com
+0.0.0.0 googlesyndication.com
+0.0.0.0 pagead2.googlesyndication.com
+0.0.0.0 adservice.google.com
+0.0.0.0 scorecardresearch.com
+0.0.0.0 quantserve.com
+0.0.0.0 facebook.net
+0.0.0.0 connect.facebook.net

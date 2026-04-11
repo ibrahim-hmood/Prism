@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/prism_page_scrim"
+    android:orientation="vertical">
+
+    <!-- Header -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="#1affffff"
+        android:paddingHorizontal="8dp">
+
+        <ImageButton
+            android:id="@+id/conversationBackBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="@color/prism_text_primary" />
+
+        <TextView
+            android:id="@+id/conversationHeaderName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="8dp"
+            android:layout_toEndOf="@id/conversationBackBtn"
+            android:text="Contact Name"
+            android:textColor="@color/prism_text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <!-- Messages List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/conversationMessagesList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:padding="12dp" />
+
+    <!-- Attachment Preview Area -->
+    <FrameLayout
+        android:id="@+id/attachmentPreviewFrame"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:visibility="gone">
+        <ImageView
+            android:id="@+id/attachmentPreviewImage"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:scaleType="centerCrop" />
+        <ImageButton
+            android:id="@+id/attachmentRemoveBtn"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="top|end"
+            android:background="@android:color/black"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="@android:color/white" />
+    </FrameLayout>
+
+    <!-- Input Area -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1affffff"
+        android:gravity="bottom"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <ImageButton
+            android:id="@+id/conversationAttachBtn"
+            android:layout_width="51dp"
+            android:layout_height="51dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/hotseat_glass_bg"
+            android:src="@android:drawable/ic_input_add"
+            app:tint="@color/prism_text_primary" />
+
+        <EditText
+            android:id="@+id/conversationInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/hotseat_glass_bg"
+            android:hint="Type a message..."
+            android:inputType="textLongMessage|textMultiLine"
+            android:maxLines="4"
+            android:padding="12dp"
+            android:textColor="@color/prism_text_primary"
+            android:textColorHint="@color/prism_text_muted" />
+
+        <ImageButton
+            android:id="@+id/conversationSendBtn"
+            android:layout_width="51dp"
+            android:layout_height="51dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/hotseat_glass_bg"
+            android:src="@android:drawable/ic_menu_send"
+            app:tint="@color/prism_text_primary" />
+    </LinearLayout>
+
+</LinearLayout>

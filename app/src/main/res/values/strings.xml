@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Prism</string>
+    <string name="browser_hint">Search or enter URL</string>
+    <string name="go">Go</string>
+    <string name="slot_browser">Browser</string>
+    <string name="slot_desktop">Desktop</string>
+    <string name="slot_drawer">App drawer</string>
+    <string name="default_page">Built-in</string>
+    <string name="apply_slot">Use this page</string>
+    <string name="page_picker_title">Change a launcher page</string>
+    <string name="page_picker_step_positions">Swipe vertically to pick Left, Center, or Right, then continue.</string>
+    <string name="page_picker_step_options">Swipe vertically through pages for this slot, then apply.</string>
+    <string name="picker_choose_page_for_slot">Choose page for this slot</string>
+    <string name="position_left">Left page</string>
+    <string name="position_center">Center page</string>
+    <string name="position_right">Right page</string>
+    <string name="position_left_detail">This is the leftmost home screen page (browser by default).</string>
+    <string name="position_center_detail">This is the middle home screen page (desktop grid by default).</string>
+    <string name="position_right_detail">This is the rightmost home screen page (app drawer by default).</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="failed_load_page">Could not load this page</string>
+    <string name="browser_tabs">Tabs</string>
+    <string name="browser_new_tab">New tab</string>
+    <string name="browser_private">Private</string>
+    <string name="browser_private_short">Private</string>
+    <string name="browser_close_tab">Close tab</string>
+    <string name="done">Done</string>
+    <string name="vpn_channel_name">Private browsing</string>
+    <string name="vpn_notification_title">Prism private DNS</string>
+    <string name="vpn_notification_text">Private tabs: DNS filtering plus IPv4 /32 sinks for resolved blocklist hosts (drops TCP/UDP/ICMP to those IPs).</string>
+</resources>

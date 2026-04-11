@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="Prism sample page">
+
+        <activity
+            android:name=".PageRegistrationActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.prism.launcher.action.DESKTOP_PAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="com.prism.launcher.PAGE_VIEW_CLASS"
+                android:value="com.prism.sample.page.SampleGlowPageView" />
+        </activity>
+    </application>
+</manifest>

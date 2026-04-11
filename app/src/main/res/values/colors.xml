@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="prism_bg">#00000000</color>
+    <color name="prism_surface">#CC1A1A24</color>
+    <color name="prism_accent">#FF7C9EFF</color>
+    <color name="prism_glass">#99FFFFFF</color>
+    <color name="prism_text_primary">#FFF5F5F7</color>
+    <color name="prism_text_muted">#B3FFFFFF</color>
+    <color name="drawer_card_glass">#66FFFFFF</color>
+    <color name="drawer_stroke">#55FFFFFF</color>
+    <color name="prism_page_scrim">#AA0A0A0F</color>
+    <color name="prism_tab_overlay">#E6000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
