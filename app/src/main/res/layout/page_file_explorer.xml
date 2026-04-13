@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/transparent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- Header & Back Button -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="8dp">
+
+        <ImageView
+            android:id="@+id/fileExplorerBackBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:src="@drawable/ic_back_24"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/fileExplorerPath"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="12dp"
+            android:layout_toEndOf="@id/fileExplorerBackBtn"
+            android:ellipsize="start"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true"
+            android:text="/storage/emulated/0"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:alpha="0.8" />
+    </RelativeLayout>
+
+    <!-- Modern Glowing Search Bar -->
+    <FrameLayout
+        android:id="@+id/fileSearchGlowContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:padding="16dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/fileSearchContainer"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:boxBackgroundColor="#20FFFFFF"
+            app:boxCornerRadiusBottomEnd="24dp"
+            app:boxCornerRadiusBottomStart="24dp"
+            app:boxCornerRadiusTopEnd="24dp"
+            app:boxCornerRadiusTopStart="24dp"
+            app:boxStrokeWidth="0dp"
+            app:boxStrokeWidthFocused="0dp"
+            app:hintEnabled="false"
+            app:startIconDrawable="@drawable/ic_search_24"
+            app:startIconTint="@color/white">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/fileSearchBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:hint="Search files &amp; folders..."
+                android:fontFamily="sans-serif-light"
+                android:inputType="text"
+                android:paddingVertical="14dp"
+                android:textColor="@color/white"
+                android:textColorHint="#A0FFFFFF" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </FrameLayout>
+
+    <!-- Content List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/fileExplorerList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginHorizontal="16dp"
+        android:clipToPadding="false"
+        android:paddingTop="8dp"
+        android:paddingBottom="80dp" />
+
+</LinearLayout>

@@ -11,18 +11,36 @@
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:windowBlurBehindEnabled">true</item>
         <item name="android:windowIsTranslucent">true</item>
+        
+        <item name="prismBackground">#F5F5F7</item>
+        <item name="prismSurface">#FFFFFF</item>
+        <item name="prismTextPrimary">#1D1D1F</item>
+        <item name="prismTextSecondary">#86868B</item>
+        <item name="prismDivider">#E5E5E5</item>
+        <item name="prismOverlay">#E6FFFFFF</item>
+        <item name="prismAccent">#007AFF</item>
+        <item name="prismCardColor">#FFFFFF</item>
     </style>
 
-    <style name="Theme.PrismPagePicker" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">#66000000</item>
-    </style>
     <style name="Theme.PrismSettings" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:windowBackground">#0F0F17</item>
-        <item name="android:statusBarColor">#0F0F17</item>
-        <item name="android:navigationBarColor">#0F0F17</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">?attr/prismBackground</item>
+        <item name="android:statusBarColor">?attr/prismBackground</item>
+        <item name="android:navigationBarColor">?attr/prismBackground</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:textColorPrimary">?attr/prismTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/prismTextSecondary</item>
+        
+        <item name="prismBackground">#F5F5F7</item>
+        <item name="prismSurface">#FFFFFF</item>
+        <item name="prismTextPrimary">#1D1D1F</item>
+        <item name="prismTextSecondary">#86868B</item>
+        <item name="prismDivider">#E5E5E5</item>
+        <item name="prismOverlay">#E6FFFFFF</item>
+        <item name="prismAccent">#007AFF</item>
+        <item name="prismCardColor">#E1E1E6</item>
+    </style>
+    <style name="CircleImage">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
     </style>
 </resources>

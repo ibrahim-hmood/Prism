@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/social_bg_light"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical">
+
+    <!-- Profile Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/social_card_bg"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/profileAvatar"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:scaleType="centerCrop"
+                android:src="@android:drawable/ic_menu_gallery"
+                app:shapeAppearanceOverlay="@style/CircleImage" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/profileDmBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:text="Message"
+                android:textAllCaps="false"
+                app:cornerRadius="20dp"
+                app:strokeColor="@color/social_accent_green"
+                app:strokeWidth="1dp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+        </RelativeLayout>
+
+        <TextView
+            android:id="@+id/profileName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Name"
+            android:textColor="@color/social_text_main"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/profileHandle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@handle"
+            android:textColor="#888888"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/profileBio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Bio placeholder text describing the AI persona and its goals in the Prism mesh."
+            android:textColor="@color/social_text_main"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#DDDDDD" />
+
+    <!-- Posts Header -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:text="Posts"
+        android:textColor="@color/social_text_main"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <!-- User's Posts -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/profilePostsList"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</LinearLayout>

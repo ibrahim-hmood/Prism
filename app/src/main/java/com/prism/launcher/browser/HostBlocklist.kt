@@ -60,8 +60,14 @@ class HostBlocklist(context: Context) {
     fun removeCustomDomain(host: String) {
         val clean = host.lowercase(Locale.US).trim().trimEnd('.')
         val current = customPrefs.getStringSet(KEY_CUSTOM_DOMAINS, emptySet())?.toMutableSet() ?: return
-        current.remove(clean)
-        customPrefs.edit().putStringSet(KEY_CUSTOM_DOMAINS, current).commit()
+        if (current.remove(clean)) {
+            customPrefs.edit().putStringSet(KEY_CUSTOM_DOMAINS, current).commit()
+        } else {
+            // It's a built-in domain, add it to our explicit whitelist so we don't load it
+            val whitelist = customPrefs.getStringSet(KEY_WHITELIST_DOMAINS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            whitelist.add(clean)
+            customPrefs.edit().putStringSet(KEY_WHITELIST_DOMAINS, whitelist).commit()
+        }
         reloadFromDisk()
     }
 
@@ -149,11 +155,16 @@ class HostBlocklist(context: Context) {
     private fun applyMerged(merged: Set<String>) {
         val hosts = HashSet<String>()
         val suffixes = ArrayList<String>()
+        val whitelist = customPrefs.getStringSet(KEY_WHITELIST_DOMAINS, emptySet()) ?: emptySet()
+        
         for (entry in merged) {
             val h = entry.lowercase(Locale.US).trimEnd('.')
-            if (h.isEmpty() || h == "localhost") continue
+            if (h.isEmpty() || h == "localhost" || whitelist.contains(h)) continue
             if (h.startsWith("*.")) {
-                suffixes.add(h.removePrefix("*."))
+                val suf = h.removePrefix("*.")
+                if (!whitelist.contains(suf)) {
+                    suffixes.add(suf)
+                }
             } else {
                 hosts.add(h)
             }
@@ -180,6 +191,7 @@ class HostBlocklist(context: Context) {
         private const val DOWNLOADED_FILE = "prism_hosts_merged.txt"
         private const val CUSTOM_PREFS = "prism_custom_blocks"
         private const val KEY_CUSTOM_DOMAINS = "domains"
+        private const val KEY_WHITELIST_DOMAINS = "whitelist_domains"
         private const val STEVENBLACK_RAW =
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
 

@@ -62,12 +62,31 @@
                 android:textColor="@color/prism_text_muted"
                 android:textSize="14sp" />
 
+            <ImageButton
+                android:id="@+id/btnAddPageLeft"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:src="@android:drawable/ic_input_add"
+                android:tint="@color/prism_text_primary"
+                android:contentDescription="Add page to left" />
+
             <androidx.viewpager2.widget.ViewPager2
                 android:id="@+id/pickerMainPager"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/btnAddPageRight"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@android:color/transparent"
+                android:src="@android:drawable/ic_input_add"
+                android:tint="@color/prism_text_primary"
+                android:contentDescription="Add page to right" />
 
             <LinearLayout
                 android:layout_width="match_parent"

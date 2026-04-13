@@ -8,6 +8,6 @@
     android:paddingEnd="24dp"
     android:paddingBottom="8dp"
     android:textAllCaps="true"
-    android:textColor="@color/prism_accent"
+    android:textColor="?attr/prismAccent"
     android:textSize="12sp"
     android:textStyle="bold" />

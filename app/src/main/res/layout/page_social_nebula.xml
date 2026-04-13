@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/prismBackground">
+
+    <!-- Top Bar -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="?attr/prismSurface"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Nebula"
+            android:textColor="?attr/prismAccent"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/socialSearch"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="16dp"
+            android:src="@android:drawable/ic_menu_search"
+            app:tint="?attr/prismTextPrimary" />
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/userProfileIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_gallery"
+            app:shapeAppearanceOverlay="@style/CircleImage" />
+    </LinearLayout>
+
+    <!-- Main Content Stack -->
+    <FrameLayout
+        android:id="@+id/socialContentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/bottomNav"
+        android:layout_below="@id/topBar">
+
+        <!-- Home View -->
+        <LinearLayout
+            android:id="@+id/homeView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/socialRefresh"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <androidx.core.widget.NestedScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <!-- Suggested Users Horizontal List -->
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/suggestedUsersList"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:clipToPadding="false"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="12dp" />
+
+                        <!-- Feed -->
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/socialFeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:nestedScrollingEnabled="false" />
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        </LinearLayout>
+
+        <!-- Dynamic Content (DMs, Profiles, Details) will be added here programmatically -->
+    </FrameLayout>
+
+    <!-- Bottom Navigation -->
+    <LinearLayout
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_alignParentBottom="true"
+        android:background="?attr/prismSurface"
+        android:elevation="8dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/navHome"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+            <ImageView
+                android:id="@+id/iconHome"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:src="@android:drawable/ic_menu_today"
+                app:tint="?attr/prismAccent" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/navDms"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+            <ImageView
+                android:id="@+id/iconDms"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:src="@android:drawable/stat_notify_chat"
+                app:tint="?attr/prismTextPrimary" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/socialFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/bottomNav"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="20dp"
+        android:src="@android:drawable/ic_menu_edit"
+        app:backgroundTint="?attr/prismAccent"
+        app:tint="?attr/prismBackground" />
+
+</RelativeLayout>

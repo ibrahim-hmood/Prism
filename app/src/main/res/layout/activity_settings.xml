@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#111111"
+    android:background="?attr/prismBackground"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
@@ -11,7 +11,28 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#00000000"
-        android:elevation="0dp" />
+        android:elevation="0dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textColor="?attr/prismTextPrimary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/themeToggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Toggle Theme"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_theme_sun" />
+    </com.google.android.material.appbar.MaterialToolbar>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/settingsList"

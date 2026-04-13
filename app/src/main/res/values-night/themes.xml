@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PrismLauncher" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowBlurBehindEnabled">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        
+        <item name="prismBackground">#0F0F17</item>
+        <item name="prismSurface">#1C1C26</item>
+        <item name="prismTextPrimary">#FFFFFF</item>
+        <item name="prismTextSecondary">#AAAAAA</item>
+        <item name="prismDivider">#2C2C36</item>
+        <item name="prismOverlay">#E6000000</item>
+        <item name="prismAccent">#7C9EFF</item>
+        <item name="prismCardColor">#2C2C36</item>
+    </style>
+
+    <style name="Theme.PrismSettings" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">?attr/prismBackground</item>
+        <item name="android:statusBarColor">?attr/prismBackground</item>
+        <item name="android:navigationBarColor">?attr/prismBackground</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:textColorPrimary">?attr/prismTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/prismTextSecondary</item>
+        
+        <item name="prismBackground">#0F0F17</item>
+        <item name="prismSurface">#1C1C26</item>
+        <item name="prismTextPrimary">#FFFFFF</item>
+        <item name="prismTextSecondary">#AAAAAA</item>
+        <item name="prismDivider">#2C2C36</item>
+        <item name="prismOverlay">#E6000000</item>
+        <item name="prismAccent">#7C9EFF</item>
+        <item name="prismCardColor">#2C2C36</item>
+    </style>
+</resources>

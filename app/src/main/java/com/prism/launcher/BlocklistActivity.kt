@@ -153,14 +153,13 @@ class DomainAdapter(
         holder.binding.domainText.text = domain
         val isCustom = customSet.contains(domain.removePrefix("*."))
         
+        holder.binding.removeDomainBtn.visibility = android.view.View.VISIBLE
+        holder.binding.removeDomainBtn.setOnClickListener { onRemove(domain) }
+        
         if (isCustom) {
-            holder.binding.removeDomainBtn.visibility = android.view.View.VISIBLE
             holder.binding.domainText.setTextColor(android.graphics.Color.WHITE)
-            holder.binding.removeDomainBtn.setOnClickListener { onRemove(domain) }
         } else {
-            holder.binding.removeDomainBtn.visibility = android.view.View.GONE
             holder.binding.domainText.setTextColor(0xB3FFFFFF.toInt()) // muted
-            holder.binding.removeDomainBtn.setOnClickListener(null)
         }
     }
 

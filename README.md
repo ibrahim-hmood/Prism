@@ -22,20 +22,41 @@ Private DNS VPN: A DNS-focused tunnel routing to Cloudflare (1.1.1.1) to filter 
 Outbound Sink-Hole: Automatically resolves blocklist hostnames to IPv4 addresses and drops outbound packets to those IPs at the routing level.
 Stealth Mode: Private tabs with DNT (Do Not Track) headers, disabled third-party cookies, and strict storage policies.
 
-4. AI Messaging Hub ("Sam")
-A proactive AI assistant integrated directly into the launcher:
-Dual Engine: Switch between On-Device (MediaPipe) for offline privacy and Cloud (OpenAI) for advanced reasoning.
-Contextual Memory: Persistent chat history stored via Room DB.
-Neon UI: High-fidelity interface featuring hardware-accelerated glowing borders and Gaussian background blur.
+4. AI Messaging Hub ("Sam") & Universal Theming
+A proactive AI assistant and dynamic UI engine:
+*   **Dual Engine**: Switch between On-Device (MediaPipe) for offline privacy and Cloud (OpenAI) for advanced reasoning.
+*   **Universal Prism Theming**: A system-wide, attribute-based theme engine supporting Light, Dark, and System Auto modes.
+*   **Sun/Moon Toggle**: A custom, high-fidelity theme switcher in Settings for manual mode control.
+*   **Glassmorphism & Depth**: Uses Gaussian blurs, hardware-accelerated neon glows, and a "shaded-white" card layout to deliver a premium, modern aesthetic.
 
 # 🛠 Technical Architecture
-Data & Persistence
-Room Database: Handles the installed app list, AI message history, and blocklist caching.
-WorkManager: Manages background synchronization of the app list and AI model ingestion.
-SharedPreferences: Stores slot assignments, desktop grid layouts (serialized), and user preferences.
-Networking & Security
-VpnService: Implements a local TUN interface to intercept UDP/53 packets.
-BlockedIpv4RouteTable: A specialized utility that translates domain-based blocklists into /32 IP routes for low-level packet dropping.
+
+Prism is built as a highly decoupled, non-blocking environment. The networking and AI systems are designed to operate as global application singletons, ensuring state persistence regardless of the Activity lifecycle.
+
+### Core Data & Persistence
+*   **Room Database**: Manages the local P2P DNS ledger, AI message history, and the system-wide domain blocklist.
+*   **WorkManager**: Orchestrates background peer synchronization and AI model ingestion.
+*   **Encrypted SharedPreferences**: Handles mesh credentials, VPN configurations, and desktop layouts.
+*   **Theme Persistence**: Centralized theme state management in `PrismSettings` with real-time Activity recreation.
+
+### Networking & Decentralized DNS
+*   **Mesh Proxy Backbone**: A global application-level singleton (`PrismTunnelEngine`) that maintains the P2P connectivity state. This allows for background content fetching and DNS resolution even when the browser is not in focus.
+*   **Hardened SSL/TLS Mesh Layer**:
+    *   **Identity Management**: Secure, pre-generated PKCS12 identities handled by `PrismSslManager`.
+    *   **Crash Protection**: Background proxy threads are hardened with robust SSL handshake recovery, ensuring that failed peer connections never terminate the core Mesh service.
+*   **Bi-Modal DNS Resolution**:
+    1.  **Priority**: Look up within the decentralized P2P Mesh ledger.
+    2.  **Fallback**: If a domain is "Mesh Unreachable", use a direct UDP query to the user-defined Primary DNS.
+    3.  **Auto-Seeding**: Successful global lookups are automatically "seeded" back into the P2P mesh, crowdsourcing the global DNS table across all active Prism nodes.
+*   **Universally Stabilized HTTPS**: 
+    - Uses a custom `SSLSocketFactory` that **suppresses the SNI (Server Name Indication)** extension. 
+    - This allows TLS handshakes to complete on custom TLDs (like `.p2p`) regardless of certificate availability on the server, eliminating the 15-second "silent drops" common in custom domain networking.
+*   **VPN Tunneling**: Implements a local `TUN` interface via `VpnService` to intercept system-wide UDP/53 traffic.
+*   **Packet-Level Interception**: Uses a `BlockedIpv4RouteTable` to translate domain blocklists into /32 IP routes, enabling zero-latency filtering at the kernel routing level.
+
+### Integrated Browser Interception
+*   **Standards-Compliant Rendering**: Uses a 6-argument `WebResourceResponse` to pass full HTTP semantics (Status Codes, Headers) from the P2P proxy back to the Chromium WebView, solving the "Raw HTML" display issue.
+*   **Virtual Host Mapping**: Transparently handles URL mapping to internal mesh IPs while preserving the original `Host` headers for correct server-side routing.
 
 # Project Structure
 :app: The primary launcher module.

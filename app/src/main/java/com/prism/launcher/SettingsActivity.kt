@@ -2,13 +2,16 @@ package com.prism.launcher
 
 import android.os.Bundle
 import android.text.InputType
-import android.view.LayoutInflater
-import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import com.prism.launcher.databinding.ActivitySettingsBinding
 import com.prism.launcher.databinding.ItemSettingHeaderBinding
 import com.prism.launcher.databinding.ItemSettingNavBinding
@@ -25,8 +28,10 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.prism.launcher.messaging.ModelDiscoveryService
+import kotlinx.coroutines.withContext
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : PrismBaseActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var adapter: SettingsAdapter
@@ -55,10 +60,60 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private val fontPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            copyFontToInternal(uri)
+        }
+    }
+
     private val modelPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val fileName = uri.lastPathSegment ?: "external_model.tflite"
-            copyUriToInternal(uri, fileName)
+            copyUriToInternal(uri, fileName, isPickingImageModel)
+        }
+    }
+    
+    private var isPickingImageModel = false
+
+    private fun copyFontToInternal(uri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val file = java.io.File(filesDir, "custom_font.ttf")
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        PrismSettings.setCustomFontPath(this@SettingsActivity, file.absolutePath)
+                        adapter.setItems(buildItems())
+                        Toast.makeText(this@SettingsActivity, "Custom Font Applied", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private val vpnProfilePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val contents = stream.reader().readText()
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            PrismSettings.setExternalVpnProfile(this@SettingsActivity, contents)
+                            adapter.setItems(buildItems())
+                            Toast.makeText(this@SettingsActivity, "External VPN Profile Loaded", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        Toast.makeText(this@SettingsActivity, "Failed to load profile", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
     }
 
@@ -104,30 +159,41 @@ class SettingsActivity : AppCompatActivity() {
                     
                     // Always try to get a clean filename from the URI
                     val fileName = localUri.lastPathSegment ?: "downloaded_model.task"
-                    copyUriToInternal(localUri, fileName)
+                    
+                    // Route to correct ingestion loop based on type
+                    val isImage = fileName.contains("SD", ignoreCase = true) || fileName.contains("Diffusion", ignoreCase = true)
+                    copyUriToInternal(localUri, fileName, isImage)
                     
                     Toast.makeText(this, "AI Model downloaded successfully!", Toast.LENGTH_LONG).show()
                 } else if (status == DownloadManager.STATUS_FAILED) {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    Toast.makeText(this, "Download failed (Reason: $reason)", Toast.LENGTH_LONG).show()
+                    if (reason == 401 || reason == 403) {
+                        PrismDialogFactory.show(
+                            this,
+                            "Access Denied",
+                            "The download failed because the source requires authentication (Error $reason). Would you like to search for a working mirror?",
+                            onPositive = { startModelDiscovery() },
+                            positiveText = "Search Web",
+                            negativeText = "Dismiss"
+                        )
+                    } else {
+                        Toast.makeText(this, "Download failed (Reason: $reason)", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
     }
 
-    private fun copyUriToInternal(uri: Uri, fileName: String) {
+    private fun copyUriToInternal(uri: Uri, fileName: String, isImageModel: Boolean = false) {
         val modelsDir = java.io.File(filesDir, "models")
         if (!modelsDir.exists()) modelsDir.mkdirs()
-
-        // Cleanup old models to save space
-        modelsDir.listFiles()?.forEach { it.delete() }
 
         val targetFile = java.io.File(modelsDir, fileName)
         
         val progressDialog = PrismDialogFactory.show(
             this,
             "Ingesting Intelligence",
-            "Optimizing $fileName for Sam...",
+            "Optimizing $fileName for Prism...",
             positiveText = null, // Hide buttons during copy
             negativeText = null,
             showProgress = true
@@ -159,7 +225,11 @@ class SettingsActivity : AppCompatActivity() {
                 
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
-                    PrismSettings.setLocalAiModelPath(this@SettingsActivity, targetFile.absolutePath)
+                    if (isImageModel) {
+                        PrismSettings.setLocalImageModelPath(this@SettingsActivity, targetFile.absolutePath)
+                    } else {
+                        PrismSettings.setLocalAiModelPath(this@SettingsActivity, targetFile.absolutePath)
+                    }
                     adapter.setItems(buildItems())
                     Toast.makeText(this@SettingsActivity, "Intelligence Acquired: $fileName", Toast.LENGTH_SHORT).show()
                 }
@@ -184,7 +254,21 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun pickLocalModel() {
-        modelPicker.launch("*/*")
+        PrismDialogFactory.show(
+            this,
+            "Model Type",
+            "What kind of intelligence are you importing?",
+            onPositive = {
+                isPickingImageModel = false
+                modelPicker.launch("*/*")
+            },
+            positiveText = "Text AI",
+            onNegative = {
+                isPickingImageModel = true
+                modelPicker.launch("*/*")
+            },
+            negativeText = "Image Gen"
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -193,15 +277,35 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Setup Toolbar
-        binding.settingsToolbar.title = "Settings"
         setSupportActionBar(binding.settingsToolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setDisplayShowTitleEnabled(false) // Use custom TextView
         binding.settingsToolbar.setNavigationOnClickListener { finish() }
+
+        // Setup Theme Toggle
+        val currentMode = PrismSettings.getThemeMode(this)
+        binding.themeToggle.setImageResource(
+            if (currentMode == PrismSettings.THEME_LIGHT) R.drawable.ic_theme_moon 
+            else R.drawable.ic_theme_sun
+        )
+        binding.themeToggle.setOnClickListener {
+            val nextMode = if (currentMode == PrismSettings.THEME_LIGHT) PrismSettings.THEME_DARK else PrismSettings.THEME_LIGHT
+            PrismSettings.setThemeMode(this, nextMode)
+            
+            // Restart with fade
+            finish()
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            startActivity(intent)
+        }
 
         // Setup RecyclerView
         adapter = SettingsAdapter(buildItems(), this::onItemClick)
         binding.settingsList.layoutManager = LinearLayoutManager(this)
         binding.settingsList.adapter = adapter
+    }
+
+    private fun getLocalIpAddress(): String {
+        return MeshUtils.getLocalMeshIp(this)
     }
 
     private fun buildItems(): List<SettingItem> {
@@ -213,6 +317,28 @@ class SettingsActivity : AppCompatActivity() {
                 listOf("Left (Browser)", "Center (Desktop)", "Right (App drawer)"),
                 PrismSettings.getDefaultPage(this),
                 { PrismSettings.setDefaultPage(this, it) }
+            ),
+
+            SettingItem.Header("Launcher Aesthetic"),
+            SettingItem.Picker(
+                "Icon Pack",
+                "Choose the appearance of app icons",
+                listOf("System Default") + IconPackEngine.getAvailableIconPacks(this).map { it.first },
+                run {
+                    val currentPkg = PrismSettings.getIconPackPackage(this)
+                    val packs = IconPackEngine.getAvailableIconPacks(this)
+                    val idx = packs.indexOfFirst { it.second == currentPkg }
+                    if (idx == -1) 0 else idx + 1
+                },
+                { idx ->
+                    if (idx == 0) {
+                        PrismSettings.setIconPackPackage(this, "")
+                    } else {
+                        val packs = IconPackEngine.getAvailableIconPacks(this)
+                        PrismSettings.setIconPackPackage(this, packs[idx - 1].second)
+                    }
+                    adapter.setItems(buildItems())
+                }
             ),
             SettingItem.Toggle(
                 "Show drawer labels",
@@ -281,10 +407,140 @@ class SettingsActivity : AppCompatActivity() {
 
             SettingItem.Header("Privacy & VPN"),
             SettingItem.Toggle(
+                "Enable VPN Tunneling",
+                "Route traffic through Prism or an external VPN",
+                PrismSettings.getVpnTunnelingEnabled(this),
+                { 
+                    PrismSettings.setVpnTunnelingEnabled(this, it) 
+                    adapter.setItems(buildItems())
+                }
+            ),
+            SettingItem.Toggle(
                 "VPN auto-start",
                 "Automatically connect VPN when a private tab opens",
                 PrismSettings.getVpnAutoStart(this),
-                { PrismSettings.setVpnAutoStart(this, it) }
+                { PrismSettings.setVpnAutoStart(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+            SettingItem.Picker(
+                "VPN Mode",
+                "Choose Prism P2P VPN or an external provider",
+                listOf("Prism VPN", "External VPN"),
+                if (PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_EXTERNAL) 1 else 0,
+                {
+                    PrismSettings.setVpnMode(this, if (it == 1) PrismSettings.VPN_MODE_EXTERNAL else PrismSettings.VPN_MODE_PRISM)
+                    adapter.setItems(buildItems())
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+            SettingItem.Toggle(
+                "Persistent VPN Server",
+                "Keep Prism Server running even outside of private browsing (Backbone mode)",
+                PrismSettings.getVpnServerAlwaysOn(this),
+                { 
+                    PrismSettings.setVpnServerAlwaysOn(this, it) 
+                    adapter.setItems(buildItems())
+                    // Start or let service re-evaluate
+                    com.prism.launcher.browser.PrivateDnsVpnService.start(this)
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM
+            ),
+            SettingItem.Picker(
+                "Prism VPN Role",
+                "Serve as a node or connect as a client",
+                listOf("Client", "Server"),
+                if (PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER) 1 else 0,
+                {
+                    PrismSettings.setPrismVpnRole(this, if (it == 1) PrismSettings.PRISM_ROLE_SERVER else PrismSettings.PRISM_ROLE_CLIENT)
+                    adapter.setItems(buildItems())
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM
+            ),
+            SettingItem.Picker(
+                "VPN Protocol",
+                "Choose protocol or let Prism auto-detect",
+                listOf("Automatic (Detected)", "IKEv2", "L2TP", "Proxy Only"),
+                when (PrismSettings.getVpnProtocolMode(this)) {
+                    PrismSettings.VPN_PROTOCOL_IKEV2 -> 1
+                    PrismSettings.VPN_PROTOCOL_L2TP -> 2
+                    PrismSettings.VPN_PROTOCOL_PROXY -> 3
+                    else -> 0
+                },
+                { idx ->
+                    val mode = when(idx) {
+                        1 -> PrismSettings.VPN_PROTOCOL_IKEV2
+                        2 -> PrismSettings.VPN_PROTOCOL_L2TP
+                        3 -> PrismSettings.VPN_PROTOCOL_PROXY
+                        else -> PrismSettings.VPN_PROTOCOL_AUTO
+                    }
+                    PrismSettings.setVpnProtocolMode(this, mode)
+                    adapter.setItems(buildItems())
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            SettingItem.Nav(
+                "Device IP Address",
+                getLocalIpAddress(),
+                {},
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            SettingItem.TextInput(
+                "Server Port",
+                "Port to accept P2P nodes (Default 8080)",
+                PrismSettings.getPrismVpnPort(this),
+                { PrismSettings.setPrismVpnPort(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            SettingItem.TextInput(
+                "Proxy Auth Password",
+                "(Optional) Set Password for incoming clients",
+                PrismSettings.getPrismVpnPassword(this),
+                { PrismSettings.setPrismVpnPassword(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            SettingItem.TextInput(
+                "Proxy Auth Username",
+                "(Optional) Set Username for incoming clients",
+                PrismSettings.getPrismVpnUsername(this),
+                { PrismSettings.setPrismVpnUsername(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            SettingItem.Nav(
+                "Manage Prism Servers",
+                "${PrismSettings.getPrismServers(this).size} servers saved (Auto-failover active)",
+                { showServerFleetManager() },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_CLIENT
+            ),
+            SettingItem.Header("Mesh Bootstrap Server"),
+            SettingItem.TextInput(
+                "Bootstrap Address",
+                "Primary entry point for P2P DNS & Mesh search",
+                PrismSettings.getMeshBootstrapAddress(this),
+                { PrismSettings.setMeshBootstrapAddress(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_CLIENT
+            ),
+            SettingItem.TextInput(
+                "Bootstrap Port",
+                "Port of the bootstrap node (Default 8081)",
+                PrismSettings.getMeshBootstrapPort(this),
+                { PrismSettings.setMeshBootstrapPort(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_CLIENT
+            ),
+            SettingItem.Nav(
+                "Configure External VPN",
+                if (PrismSettings.getExternalVpnProfile(this).isEmpty()) "Setup WireGuard profile (.conf)" else "WireGuard Profile Loaded",
+                {
+                    vpnProfilePicker.launch("*/*")
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_EXTERNAL
+            ),
+            SettingItem.Nav(
+                "App Whitelists",
+                "Select apps to bypass the VPN tunnel",
+                {
+                    startActivity(android.content.Intent(this@SettingsActivity, com.prism.launcher.vpn.WhitelistActivity::class.java))
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
             ),
             SettingItem.Toggle(
                 "Locked private tabs",
@@ -296,18 +552,53 @@ class SettingsActivity : AppCompatActivity() {
                 "Primary DNS",
                 "Used by the private VPN tunnel",
                 PrismSettings.getPrimaryDns(this),
-                { PrismSettings.setPrimaryDns(this, it) }
+                { PrismSettings.setPrimaryDns(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
             ),
             SettingItem.TextInput(
                 "Secondary DNS",
                 "Used by the private VPN tunnel",
                 PrismSettings.getSecondaryDns(this),
-                { PrismSettings.setSecondaryDns(this, it) }
+                { PrismSettings.setSecondaryDns(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+
+            SettingItem.Header("Native VPN Server (WireGuard)"),
+            SettingItem.TextInput(
+                "WireGuard Listen Port",
+                "Port for direct VPN connections (Default 51820)",
+                PrismSettings.getWgServerPort(this).toString(),
+                { 
+                    val p = it.toIntOrNull() ?: 51820
+                    PrismSettings.setWgServerPort(this, p) 
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+            SettingItem.TextInput(
+                "Allowed IPs",
+                "Traffic to route through VPN (e.g. 0.0.0.0/0 for everything)",
+                PrismSettings.getWgAllowedIps(this),
+                { PrismSettings.setWgAllowedIps(this, it) },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+            SettingItem.Nav(
+                "Copy Client Config",
+                "Generate .conf for Windows WireGuard app",
+                {
+                    val config = PrismSettings.generateWgClientConfig(this)
+                        .replace("YOUR_PHONE_IP_HERE", getLocalIpAddress())
+                    
+                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Prism WireGuard", config))
+                    
+                    PrismDialogFactory.show(this, "Config Copied", "Paste this into a new tunnel in your Windows WireGuard app. \n\nNOTE: Replace 'CLIENT_PRIVATE_KEY_HERE' in the config with your own generated key.")
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
             ),
 
             SettingItem.Header("Intelligence & Messaging"),
             SettingItem.Picker(
-                "Sam AI Engine",
+                "Prism AI Engine",
                 "Choose between local on-device AI or cloud LLM",
                 listOf("Local TFLite", "Cloud API"),
                 if (PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD) 1 else 0,
@@ -322,14 +613,17 @@ class SettingsActivity : AppCompatActivity() {
                 "OpenAI, Gemini, or custom provider key",
                 PrismSettings.getCloudAiKey(this),
                 { PrismSettings.setCloudAiKey(this, it) },
-                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD
+                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD,
+                isSingleLine = true,
+                isEncoded = true
             ),
             SettingItem.TextInput(
                 "Cloud Base URL",
                 "Endpoint root (must be OpenAI compatible)",
                 PrismSettings.getCloudAiBaseUrl(this),
                 { PrismSettings.setCloudAiBaseUrl(this, it) },
-                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD
+                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD,
+                isSingleLine = true
             ),
             SettingItem.TextInput(
                 "Cloud Model ID",
@@ -341,12 +635,12 @@ class SettingsActivity : AppCompatActivity() {
 
             SettingItem.Nav(
                 "Local AI Model",
-                "Select a .tflite model from storage",
+                "Select a .task or .bin LLM from storage",
                 { pickLocalModel() },
                 isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL
             ),
             
-            SettingItem.Header("Available AI Models"),
+            SettingItem.Header("Available LLM Models"),
             SettingItem.Nav(
                 "Falcon-1B RefinedWeb",
                 "Fast & efficient (1B params, ~600MB)",
@@ -365,10 +659,17 @@ class SettingsActivity : AppCompatActivity() {
                 { downloadModel("Phi-2", PrismSettings.MODEL_PHI_2) },
                 isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL
             ),
+
+            SettingItem.Header("Visual Intelligence (Diffusion)"),
             SettingItem.Nav(
-                "MobileBERT-QA",
-                "Specialized for question answering",
-                { downloadModel("MobileBERT-QA", PrismSettings.MODEL_MOBILEBERT) },
+                "Search for Models",
+                "Find working Stable Diffusion mirrors on Hugging Face",
+                { startModelDiscovery() }
+            ),
+            SettingItem.Nav(
+                "Stable Diffusion v1.5",
+                "Generate realistic images locally (~2GB RAM needed)",
+                { downloadModel("SD-1.5", PrismSettings.MODEL_SD_1_5_CPU) },
                 isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL
             ),
 
@@ -380,8 +681,101 @@ class SettingsActivity : AppCompatActivity() {
                     val intent = android.content.Intent(this, BlocklistActivity::class.java)
                     startActivity(intent)
                 }
+            ),
+            SettingItem.Header("Decentralized Name System"),
+            SettingItem.Nav(
+                "Manage P2P DNS",
+                "View and edit domain mappings in the mesh ledger",
+                {
+                    startActivity(android.content.Intent(this, com.prism.launcher.browser.P2pDnsActivity::class.java))
+                }
+            ),
+            SettingItem.Nav(
+                "P2P Web Hosting",
+                "Host local folders as websites on the mesh",
+                {
+                    startActivity(android.content.Intent(this, com.prism.launcher.browser.P2pHostingActivity::class.java))
+                }
+            ),
+            SettingItem.Nav(
+                "System Diagnostics",
+                "Live terminal console and error logs",
+                {
+                    startActivity(android.content.Intent(this, DiagnosticsActivity::class.java))
+                }
+            ),
+
+            SettingItem.Header("Typography"),
+            SettingItem.Picker(
+                "Font Style",
+                "Choose the default app & browser font",
+                listOf("System Default", "Nasalization (Modern)", "Custom File (.ttf)"),
+                when(PrismSettings.getFontStyle(this)) {
+                    PrismSettings.FONT_STYLE_NASALIZATION -> 1
+                    PrismSettings.FONT_STYLE_CUSTOM -> 2
+                    else -> 0
+                },
+                { idx ->
+                    val style = when(idx) {
+                        1 -> PrismSettings.FONT_STYLE_NASALIZATION
+                        2 -> PrismSettings.FONT_STYLE_CUSTOM
+                        else -> PrismSettings.FONT_STYLE_DEFAULT
+                    }
+                    PrismSettings.setFontStyle(this, style)
+                    // If Custom is selected but no path exists, prompt to pick
+                    if (style == PrismSettings.FONT_STYLE_CUSTOM && PrismSettings.getCustomFontPath(this).isEmpty()) {
+                        fontPicker.launch("*/*")
+                    } else {
+                        Toast.makeText(this, "Restart app to fully apply fonts", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            ),
+            SettingItem.Nav(
+                "Select Custom Font",
+                "Load a .ttf or .otf file from storage",
+                { fontPicker.launch("*/*") },
+                isEnabled = PrismSettings.getFontStyle(this) == PrismSettings.FONT_STYLE_CUSTOM
             )
         )
+    }
+
+    private fun buildSlotPickers(): Array<SettingItem> {
+        val prefs = SlotPreferences(this)
+        val assignments = prefs.getAssignments()
+        val options = listOf("Browser", "Desktop Grid", "App Drawer", "Messaging", "Nebula Social", "Kinetic Halo", "File Explorer")
+        
+        return assignments.mapIndexed { index, current ->
+            val currentIdx = when(current) {
+                SlotAssignment.Browser -> 0
+                SlotAssignment.DesktopGrid -> 1
+                SlotAssignment.AppDrawer -> 2
+                SlotAssignment.Messaging -> 3
+                SlotAssignment.NebulaSocial -> 4
+                SlotAssignment.KineticHalo -> 5
+                SlotAssignment.FileExplorer -> 6
+                else -> 1 // Default to Desktop Grid
+            }
+            
+            SettingItem.Picker(
+                "Page ${index + 1} Content",
+                "Built-in page assigned to this slot",
+                options,
+                currentIdx,
+                { idx ->
+                    val assignment = when(idx) {
+                        0 -> SlotAssignment.Browser
+                        1 -> SlotAssignment.DesktopGrid
+                        2 -> SlotAssignment.AppDrawer
+                        3 -> SlotAssignment.Messaging
+                        4 -> SlotAssignment.NebulaSocial
+                        5 -> SlotAssignment.KineticHalo
+                        6 -> SlotAssignment.FileExplorer
+                        else -> SlotAssignment.Default
+                    }
+                    prefs.setAt(index, assignment)
+                }
+            )
+        }.toTypedArray()
     }
 
     private fun onItemClick(item: SettingItem, position: Int) {
@@ -389,7 +783,7 @@ class SettingsActivity : AppCompatActivity() {
             is SettingItem.Toggle -> {
                 item.value = !item.value
                 item.onChanged(item.value)
-                adapter.notifyItemChanged(position)
+                adapter.setItems(buildItems())
             }
             is SettingItem.Picker -> {
                 PrismDialogFactory.show(
@@ -398,20 +792,39 @@ class SettingsActivity : AppCompatActivity() {
                     "Choose an option:",
                     onPositive = {},
                     customView = android.widget.ListView(this).apply {
-                        adapter = android.widget.ArrayAdapter(this@SettingsActivity, android.R.layout.simple_list_item_single_choice, item.options)
+                        adapter = object : android.widget.ArrayAdapter<String>(this@SettingsActivity, android.R.layout.simple_list_item_single_choice, item.options) {
+                            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                                val v = super.getView(position, convertView, parent)
+                                (v as? TextView)?.setTextColor(this@SettingsActivity.resolveAttr(com.prism.launcher.R.attr.prismTextPrimary))
+                                return v
+                            }
+                        }
                         choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
                         setItemChecked(item.currentSelection, true)
                         setOnItemClickListener { _, _, which, _ ->
                             item.currentSelection = which
                             item.onChanged(which)
-                            this@SettingsActivity.adapter.notifyItemChanged(position)
+                            this@SettingsActivity.adapter.setItems(buildItems())
                         }
                     }
                 )
             }
             is SettingItem.TextInput -> {
                 val input = EditText(this).apply {
-                    inputType = InputType.TYPE_CLASS_TEXT
+                    val p = (16 * resources.displayMetrics.density).toInt()
+                    setPadding(p, p, p, p)
+                    setTextColor(resolveAttr(R.attr.prismTextPrimary))
+                    setHintTextColor(resolveAttr(R.attr.prismTextSecondary))
+                    
+                    if (item.isSingleLine) {
+                        isSingleLine = true
+                        maxLines = 1
+                    }
+                    if (item.isEncoded) {
+                        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    } else {
+                        inputType = InputType.TYPE_CLASS_TEXT
+                    }
                     setText(item.value)
                 }
                 PrismDialogFactory.show(
@@ -423,10 +836,14 @@ class SettingsActivity : AppCompatActivity() {
                         if (newValue.isNotEmpty()) {
                             item.value = newValue
                             item.onChanged(newValue)
-                            this@SettingsActivity.adapter.notifyItemChanged(position)
+                            this@SettingsActivity.adapter.setItems(buildItems())
                         }
                     },
-                    customView = input
+                    customView = FrameLayout(this).apply {
+                        val pad = (24 * resources.displayMetrics.density).toInt()
+                        setPadding(pad, pad, pad, pad)
+                        addView(input)
+                    }
                 )
             }
             is SettingItem.Nav -> {
@@ -434,6 +851,102 @@ class SettingsActivity : AppCompatActivity() {
             }
             is SettingItem.Header -> {} 
         }
+    }
+
+    private fun showServerFleetManager() {
+        val servers = PrismSettings.getPrismServers(this)
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
+
+        val list = android.widget.ListView(this).apply {
+            adapter = object : android.widget.BaseAdapter() {
+                override fun getCount(): Int = servers.size
+                override fun getItem(p0: Int) = servers[p0]
+                override fun getItemId(p0: Int) = p0.toLong()
+                override fun getView(idx: Int, convertView: android.view.View?, parent: android.view.ViewGroup?): android.view.View {
+                    val s = servers[idx]
+                    val view = convertView ?: android.view.LayoutInflater.from(this@SettingsActivity).inflate(android.R.layout.simple_list_item_2, parent, false)
+                    val t1 = view.findViewById<android.widget.TextView>(android.R.id.text1)
+                    val t2 = view.findViewById<android.widget.TextView>(android.R.id.text2)
+                    
+                    t1.text = if (s.isActive) "● ${s.name} (ACTIVE)" else s.name
+                    t1.setTextColor(if (s.isActive) PrismSettings.getGlowColor(this@SettingsActivity) else android.graphics.Color.WHITE)
+                    t2.text = "${s.address}:${s.port} | User: ${s.username}"
+                    t2.setTextColor(android.graphics.Color.GRAY)
+                    
+                    view.setOnClickListener {
+                        servers.forEach { it.isActive = false }
+                        s.isActive = true
+                        PrismSettings.setPrismServers(this@SettingsActivity, servers)
+                        this@SettingsActivity.adapter.setItems(buildItems())
+                        showServerFleetManager() // Refresh
+                    }
+                    
+                    view.setOnLongClickListener {
+                        PrismDialogFactory.show(this@SettingsActivity, "Delete Server?", "Remove ${s.name} from your fleet?", onPositive = {
+                            val newList = servers.toMutableList()
+                            newList.removeAt(idx)
+                            PrismSettings.setPrismServers(this@SettingsActivity, newList)
+                            this@SettingsActivity.adapter.setItems(buildItems())
+                            showServerFleetManager()
+                        })
+                        true
+                    }
+                    return view
+                }
+            }
+        }
+        
+        container.addView(list, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 800))
+        
+        val addBtn = android.widget.Button(this).apply {
+            text = "+ ADD PRISM SERVER"
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setTextColor(PrismSettings.getGlowColor(this@SettingsActivity))
+            setOnClickListener { showAddServerDialog() }
+        }
+        container.addView(addBtn)
+
+        PrismDialogFactory.show(this, "Prism Server Fleet", "Select active server or long-press to delete.", customView = container)
+    }
+
+    private fun showAddServerDialog() {
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+        
+        val nameInput = EditText(this).apply { hint = "Server Name (e.g. Home Lab)" }
+        val ipInput = EditText(this).apply { hint = "Target IP/Hostname" }
+        val portInput = EditText(this).apply { hint = "Port (Default 8888)"; inputType = android.text.InputType.TYPE_CLASS_NUMBER }
+        val userInput = EditText(this).apply { hint = "Username" }
+        val passInput = EditText(this).apply { hint = "Password"; inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        
+        layout.addView(nameInput)
+        layout.addView(ipInput)
+        layout.addView(portInput)
+        layout.addView(userInput)
+        layout.addView(passInput)
+
+        PrismDialogFactory.show(this, "Add Prism Server", "Enter your server credentials below.", onPositive = {
+            val name = nameInput.text.toString().trim()
+            val ip = ipInput.text.toString().trim()
+            if (name.isNotEmpty() && ip.isNotEmpty()) {
+                val servers = PrismSettings.getPrismServers(this).toMutableList()
+                servers.add(PrismSettings.PrismServer(
+                    name = name,
+                    address = ip,
+                    port = portInput.text.toString().toIntOrNull() ?: 8888,
+                    username = userInput.text.toString(),
+                    password = passInput.text.toString()
+                ))
+                PrismSettings.setPrismServers(this, servers)
+                adapter.setItems(buildItems())
+                showServerFleetManager()
+            }
+        }, customView = layout)
     }
 
     private fun promptCustomSearchUrl() {
@@ -451,6 +964,81 @@ class SettingsActivity : AppCompatActivity() {
             customView = input
         )
     }
+
+    private fun startModelDiscovery() {
+        val categories = arrayOf("Generative", "Vision/Face", "Enhancement", "Unified (All)")
+        val categoryIds = arrayOf("generative", "vision", "enhancement", "all")
+        
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+        
+        val searchInput = EditText(this).apply { 
+            hint = "Search query (e.g. flux, face, deep)" 
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(android.graphics.Color.GRAY)
+        }
+        val categorySpinner = android.widget.Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@SettingsActivity, android.R.layout.simple_spinner_dropdown_item, categories)
+        }
+        
+        layout.addView(android.widget.TextView(this).apply { 
+            text = "AI Category"
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        layout.addView(categorySpinner)
+        layout.addView(android.widget.TextView(this).apply { 
+            text = "Search Term"
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        layout.addView(searchInput)
+
+        PrismDialogFactory.show(this, "Discovery Engine", "Find AI models from HuggingFace, GitHub, and Google.", onPositive = {
+            val query = searchInput.text.toString().trim().ifEmpty { "stable diffusion" }
+            val category = categoryIds[categorySpinner.selectedItemPosition]
+            performUniversalSearch(query, category)
+        }, customView = layout, positiveText = "Launch Scan")
+    }
+
+    private fun performUniversalSearch(query: String, category: String) {
+        val discoveryDialog = PrismDialogFactory.show(
+            this, "Crawling Mesh", "Searching multiple sources for '$query'...", 
+            showProgress = true, positiveText = null, negativeText = "Cancel"
+        )
+        
+        lifecycleScope.launch {
+            val models = ModelDiscoveryService.discoverAll(query, category)
+            discoveryDialog.dismiss()
+            
+            if (models.isEmpty()) {
+                Toast.makeText(this@SettingsActivity, "No models found for '$query'.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            
+            val modelNames = models.map { model -> 
+                "[${model.source}] ${model.name}\n${model.sizeLabel} • ${model.category.uppercase()}" 
+            }.toTypedArray()
+            
+            val listView = android.widget.ListView(this@SettingsActivity).apply {
+                adapter = android.widget.ArrayAdapter(this@SettingsActivity, android.R.layout.simple_list_item_1, modelNames)
+            }
+            
+            val selectionDialog = PrismDialogFactory.show(
+                this@SettingsActivity,
+                "Universal Mesh Discovery",
+                "Select a model to ingestion:",
+                customView = listView,
+                positiveText = null
+            )
+            
+            listView.setOnItemClickListener { _, _, position, _ ->
+                val selected = models[position]
+                selectionDialog.dismiss()
+                downloadModel(selected.name, selected.downloadUrl)
+            }
+        }
+    }
 }
 
 // ── Models & Adapter ────────────────────────────────────────────────────────
@@ -459,7 +1047,7 @@ sealed class SettingItem(open val isEnabled: Boolean = true) {
     data class Header(val title: String) : SettingItem(true)
     data class Toggle(val title: String, val subtitle: String, var value: Boolean, val onChanged: (Boolean) -> Unit, override val isEnabled: Boolean = true) : SettingItem(isEnabled)
     data class Picker(val title: String, val subtitle: String, val options: List<String>, var currentSelection: Int, val onChanged: (Int) -> Unit, override val isEnabled: Boolean = true) : SettingItem(isEnabled)
-    data class TextInput(val title: String, val subtitle: String, var value: String, val onChanged: (String) -> Unit, override val isEnabled: Boolean = true) : SettingItem(isEnabled)
+    data class TextInput(val title: String, val subtitle: String, var value: String, val onChanged: (String) -> Unit, override val isEnabled: Boolean = true, val isSingleLine: Boolean = false, val isEncoded: Boolean = false) : SettingItem(isEnabled)
     data class Nav(val title: String, val subtitle: String, val onClick: () -> Unit, override val isEnabled: Boolean = true) : SettingItem(isEnabled)
 }
 
@@ -535,7 +1123,12 @@ class SettingsAdapter(
 
         val context = holder.itemView.context
         val bg = android.graphics.drawable.GradientDrawable()
-        bg.setColor(android.graphics.Color.parseColor("#333333"))
+        
+        val typedValue = android.util.TypedValue()
+        context.theme.resolveAttribute(R.attr.prismCardColor, typedValue, true)
+        val color = if (typedValue.type != android.util.TypedValue.TYPE_NULL) typedValue.data else android.graphics.Color.WHITE
+        
+        bg.setColor(color)
 
         val radius = 16f * context.resources.displayMetrics.density
         val isFirst = position == 0 || items[position - 1] is SettingItem.Header

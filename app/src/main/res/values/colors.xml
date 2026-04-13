@@ -6,9 +6,21 @@
     <color name="prism_glass">#99FFFFFF</color>
     <color name="prism_text_primary">#FFF5F5F7</color>
     <color name="prism_text_muted">#B3FFFFFF</color>
+    <color name="prism_text_secondary">#99FFFFFF</color>
     <color name="drawer_card_glass">#66FFFFFF</color>
     <color name="drawer_stroke">#55FFFFFF</color>
     <color name="prism_page_scrim">#AA0A0A0F</color>
     <color name="prism_tab_overlay">#E6000000</color>
+    <color name="prism_bg_dark">#FF050505</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Nebula Social Redesign (Dark Mode Transition) -->
+    <color name="social_bg_light">#FF0A0A0F</color>
+    <color name="social_card_bg">#FF1A1A24</color>
+    <color name="social_text_main">#FFFFFFFF</color>
+    <color name="social_accent_green">#FF00BA7C</color>
+    
+    <!-- P2P Health Check Refinement -->
+    <color name="check_dns_blue">#FF00D5FF</color>
+    <color name="check_no_dns_pink">#FFFF77EE</color>
 </resources>

@@ -43,14 +43,24 @@
                     android:textSize="28sp"
                     android:fontFamily="sans-serif-medium" />
 
-                <ImageButton
-                    android:id="@+id/settingsBtn"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                <FrameLayout
+                    android:id="@+id/settingsBtnWrapper"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
                     android:layout_alignParentEnd="true"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Settings"
-                    android:src="@drawable/ic_settings_24" />
+                    android:layout_centerVertical="true"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:padding="8dp">
+
+                    <ImageButton
+                        android:id="@+id/settingsBtn"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Settings"
+                        android:src="@drawable/ic_settings_24" />
+                </FrameLayout>
             </RelativeLayout>
 
             <!-- Padding for Neon Glow container remains unclipped -->

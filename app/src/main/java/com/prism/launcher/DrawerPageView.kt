@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.prism.launcher.databinding.PageDrawerRootBinding
 import kotlinx.coroutines.*
 
@@ -21,17 +22,29 @@ class DrawerPageView(
     private val allowDragToDesktop: () -> Boolean,
 ) : FrameLayout(context) {
 
-    private val adapter = DrawerAppsAdapter(onLaunch, allowDragToDesktop)
+    private val adapter = DrawerAppsAdapter({ onLaunch(it) }, { allowDragToDesktop() })
     private var allApps: List<DrawerAppEntry> = emptyList()
     private var filterJob: Job? = null
     
     // Design tokens
     private val glowColor = PrismSettings.getGlowColor(context)
 
+    private fun resolveAttr(attr: Int): Int {
+        val typedValue = android.util.TypedValue()
+        context.theme.resolveAttribute(attr, typedValue, true)
+        return typedValue.data
+    }
+
     init {
         val binding = PageDrawerRootBinding.inflate(LayoutInflater.from(context), this, true)
         
-        binding.drawerList.layoutManager = LinearLayoutManager(context)
+        val layoutManager = GridLayoutManager(context, 4)
+        layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int {
+                return if (adapter.getItemViewType(position) == DrawerAppsAdapter.VIEW_TYPE_GROUP) 4 else 1
+            }
+        }
+        binding.drawerList.layoutManager = layoutManager
         binding.drawerList.adapter = adapter
         
         // Background is now handled by LauncherActivity for system-level blur
@@ -41,10 +54,11 @@ class DrawerPageView(
         binding.searchContainer.setStartIconTintList(ColorStateList.valueOf(glowColor))
         
         // 2. Settings Button Glow
+        binding.settingsBtnWrapper.background = NeonGlowDrawable(glowColor, 32f * resources.displayMetrics.density, 4f)
         binding.settingsBtn.imageTintList = ColorStateList.valueOf(glowColor)
         
         // 3. App Title Neon (Tube effect)
-        NeonGlowEngine.applyNeonText(binding.drawerPageHandle, Color.WHITE, 16f)
+        NeonGlowEngine.applyNeonText(binding.drawerPageHandle, resolveAttr(R.attr.prismTextPrimary), 16f)
         
         // 4. Staccato Bubble Neon
         binding.staccatoBubble.background = NeonGlowDrawable(glowColor, 36f * resources.displayMetrics.density, 8f)
@@ -75,10 +89,10 @@ class DrawerPageView(
                 text = char.toString()
                 textSize = 9f
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
+                setTextColor(resolveAttr(R.attr.prismTextPrimary))
                 alpha = 0.6f
                 // Apply a faint base glow for "unlit" state
-                setShadowLayer(4f, 0f, 0f, Color.argb(100, 255, 255, 255))
+                setShadowLayer(4f, 0f, 0f, Color.argb(40, 0, 0, 0))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                 )
@@ -123,8 +137,8 @@ class DrawerPageView(
                     
                     letterViews.forEach { 
                         it.alpha = 0.6f
-                        it.setShadowLayer(4f, 0f, 0f, Color.argb(100, 255, 255, 255))
-                        it.setTextColor(Color.WHITE)
+                        it.setShadowLayer(4f, 0f, 0f, Color.argb(40, 0, 0, 0))
+                        it.setTextColor(resolveAttr(R.attr.prismTextPrimary))
                     }
                     true
                 }
@@ -151,8 +165,8 @@ class DrawerPageView(
                 NeonGlowEngine.applyNeonText(tv, glowColor, 18f)
             } else {
                 tv.alpha = 0.6f
-                tv.setShadowLayer(4f, 0f, 0f, Color.argb(100, 255, 255, 255))
-                tv.setTextColor(Color.WHITE)
+                tv.setShadowLayer(4f, 0f, 0f, Color.argb(40, 0, 0, 0))
+                tv.setTextColor(resolveAttr(R.attr.prismTextPrimary))
             }
         }
         
@@ -166,7 +180,7 @@ class DrawerPageView(
         }
         if (index != -1) {
             val binding = PageDrawerRootBinding.bind(this)
-            (binding.drawerList.layoutManager as LinearLayoutManager)
+            (binding.drawerList.layoutManager as GridLayoutManager)
                 .scrollToPositionWithOffset(index, 0)
         }
     }
@@ -176,7 +190,8 @@ class DrawerPageView(
         val lifecycleOwner = context as? LifecycleOwner ?: return
         lifecycleOwner.lifecycleScope.launch {
             allApps = withContext(Dispatchers.IO) { resolveAppsFromDb() }
-            adapter.submitList(allApps)
+            val grouped = groupDrawerApps(allApps)
+            adapter.submitList(grouped)
         }
     }
 
@@ -185,14 +200,16 @@ class DrawerPageView(
         filterJob?.cancel()
         filterJob = lifecycleOwner.lifecycleScope.launch {
             if (query.isBlank()) {
-                adapter.submitList(allApps)
+                val grouped = groupDrawerApps(allApps)
+                adapter.submitList(grouped)
                 return@launch
             }
             delay(150)
             val filtered = allApps.filter {
                 it.label.contains(query, ignoreCase = true)
             }
-            adapter.submitList(filtered)
+            val grouped = groupDrawerApps(filtered)
+            adapter.submitList(grouped)
         }
     }
 

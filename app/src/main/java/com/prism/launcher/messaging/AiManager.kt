@@ -19,8 +19,13 @@ object AiManager {
         val mode = PrismSettings.getAiMode(context)
         
         if (mode == PrismSettings.AI_MODE_CLOUD) {
-            // Priority 1: Check for mock triggers (image/video)
-            if (userText.contains("image", ignoreCase = true) || userText.contains("video", ignoreCase = true)) {
+            // Priority 1: Check for triggers (image/video)
+            if (userText.contains("generate image", ignoreCase = true) || userText.contains("make a picture", ignoreCase = true)) {
+                val uri = ImageGenManager.generateImage(context, userText)
+                return@withContext Pair("I've generated a high-fidelity image for you.", Pair(uri?.toString(), "image"))
+            }
+
+            if (userText.contains("video", ignoreCase = true)) {
                 return@withContext CloudAiService.generateResponse(userText)
             }
 

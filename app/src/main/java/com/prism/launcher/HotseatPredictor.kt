@@ -24,13 +24,22 @@ object HotseatPredictor {
             }
         }
 
-        // 3. Still short? Fallback to whatever is installed (randomly sorted)
+        // 3. Still short? Use persistent fallback (random selection for new users)
         if (predictions.size < limit) {
-            val installed = db.installedAppDao().getAll()
-                .map { "${it.packageName}/${it.activityClass}" }
-                .shuffled() // Random selection for new users
+            val prefs = context.getSharedPreferences("PrismHotseat", Context.MODE_PRIVATE)
+            val cachedStr = prefs.getString("initial_fallback", null)
             
-            for (cn in installed) {
+            val fallbackPool = if (cachedStr != null) {
+                cachedStr.split(",")
+            } else {
+                val shuffled = db.installedAppDao().getAll()
+                    .map { "${it.packageName}/${it.activityClass}" }
+                    .shuffled()
+                prefs.edit().putString("initial_fallback", shuffled.joinToString(",")).apply()
+                shuffled
+            }
+            
+            for (cn in fallbackPool) {
                 if (predictions.size >= limit) break
                 if (!predictions.contains(cn)) {
                     predictions.add(cn)

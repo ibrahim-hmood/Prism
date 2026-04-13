@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.prism.launcher.browser.BrowserPageView
+import com.prism.launcher.files.FileExplorerPageView
 import com.prism.launcher.messaging.MessagingPageView
 
 class MainDesktopPagerAdapter(
@@ -25,7 +26,7 @@ class MainDesktopPagerAdapter(
         notifyDataSetChanged()
     }
 
-    override fun getItemCount(): Int = 3
+    override fun getItemCount(): Int = assignments.size
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageHolder {
         val container = FrameLayout(parent.context).apply {
@@ -61,6 +62,20 @@ class MainDesktopPagerAdapter(
 
     private fun buildPage(ctx: android.content.Context, position: Int, assignment: SlotAssignment): View {
         return when (assignment) {
+            SlotAssignment.Browser -> BrowserPageView(activity)
+            SlotAssignment.DesktopGrid -> DesktopGridPage(
+                ctx,
+                position,
+                onLaunch = onLaunch,
+                onDataChanged = onDesktopChanged,
+                acceptDrawerDrops = acceptDesktopDrawerDrops,
+            )
+            SlotAssignment.AppDrawer -> DrawerPageView(
+                ctx,
+                onLaunch,
+                allowDragToDesktop = allowDrawerDrag,
+            )
+
             is SlotAssignment.Custom -> {
                 val v = DynamicPageLoader.inflateView(
                     ctx,
@@ -72,24 +87,19 @@ class MainDesktopPagerAdapter(
 
             SlotAssignment.Messaging -> MessagingPageView(activity)
 
+            SlotAssignment.NebulaSocial -> com.prism.launcher.social.NebulaSocialPageView(activity)
+
             SlotAssignment.KineticHalo -> KineticHaloPageView(activity, onLaunch)
+            
+            SlotAssignment.FileExplorer -> FileExplorerPageView(ctx)
 
-            SlotAssignment.Default -> when (position) {
-                0 -> BrowserPageView(activity)
-                1 -> DesktopGridPage(
-                    ctx,
-                    desktopShortcutStore,
-                    onLaunch = onLaunch,
-                    onDataChanged = onDesktopChanged,
-                    acceptDrawerDrops = acceptDesktopDrawerDrops,
-                )
-
-                else -> DrawerPageView(
-                    ctx,
-                    onLaunch,
-                    allowDragToDesktop = allowDrawerDrag,
-                )
-            }
+            SlotAssignment.Default -> DesktopGridPage(
+                ctx,
+                position,
+                onLaunch = onLaunch,
+                onDataChanged = onDesktopChanged,
+                acceptDrawerDrops = acceptDesktopDrawerDrops,
+            )
         }
     }
 

@@ -24,9 +24,10 @@ import com.prism.launcher.browser.BrowserPageView
 import com.prism.launcher.browser.PrivateDnsVpnService
 import com.prism.launcher.databinding.ActivityLauncherBinding
 import com.prism.launcher.messaging.MessagingPageView
+import android.widget.Toast
 import kotlinx.coroutines.launch
 
-class LauncherActivity : AppCompatActivity() {
+class LauncherActivity : PrismBaseActivity() {
 
     private lateinit var binding: ActivityLauncherBinding
     lateinit var slotPreferences: SlotPreferences
@@ -34,6 +35,7 @@ class LauncherActivity : AppCompatActivity() {
     private lateinit var desktopShortcutStore: DesktopShortcutStore
     private lateinit var mainAdapter: MainDesktopPagerAdapter
     private var browserPage: BrowserPageView? = null
+    private var fileExplorerPage: com.prism.launcher.files.FileExplorerPageView? = null
     private var discoveredPlugins: List<PluginPageInfo> = emptyList()
     private var pendingPickerSlot: Int = 1
     
@@ -84,23 +86,28 @@ class LauncherActivity : AppCompatActivity() {
 
         slotPreferences = SlotPreferences(this)
         desktopShortcutStore = DesktopShortcutStore(this)
+        
+        if (PrismSettings.getVpnServerAlwaysOn(this)) {
+            com.prism.launcher.browser.PrivateDnsVpnService.start(this, false)
+        }
+        
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
         mainAdapter = MainDesktopPagerAdapter(
             activity = this,
             desktopShortcutStore = desktopShortcutStore,
-            assignments = slotPreferences.assignmentsInOrder(),
+            assignments = slotPreferences.getAssignments(),
             onLaunch = { launchComponent(it) },
             onDesktopChanged = { },
             allowDrawerDrag = {
-                val allowed = slotPreferences.get(SlotIndex.DRAWER) is SlotAssignment.Default &&
-                              slotPreferences.get(SlotIndex.DESKTOP) is SlotAssignment.Default
-                if (allowed) binding.desktopPager.setCurrentItem(1, true)
-                allowed
+                val destPos = findDesktopPosition()
+                if (destPos != -1) {
+                    binding.desktopPager.setCurrentItem(destPos, true)
+                    true
+                } else false
             },
             acceptDesktopDrawerDrops = {
-                slotPreferences.get(SlotIndex.DESKTOP) is SlotAssignment.Default &&
-                    slotPreferences.get(SlotIndex.DRAWER) is SlotAssignment.Default
+                findDesktopPosition() != -1 && findDrawerPosition() != -1
             },
         )
         binding.desktopPager.adapter = mainAdapter
@@ -109,22 +116,27 @@ class LauncherActivity : AppCompatActivity() {
 
         binding.desktopPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
-                // position 0: Browser, position 1: Desktop, position 2: Drawer
+                // position 0: Left, position 1: Center, position 2: Right
+                val page = findPageViewAt(position)
+                val isFileExplorer = page is com.prism.launcher.files.FileExplorerPageView
+                val isDrawer = position >= 2 // App Drawer is usually right-most
+                
+                // 1. Calculate Blur Progress
                 val progress = when {
-                    position >= 2 -> 1f // Stable on App Drawer
-                    position == 1 -> positionOffset.coerceIn(0f, 1f) // Swiping to Drawer
-                    else -> 0f // Swiping to Browser or on Browser
+                    isFileExplorer -> 1.0f
+                    isDrawer -> 1.0f
+                    else -> positionOffset.coerceIn(0f, 1f)
                 }
 
-                // 1. Zoom and Scrim (Fallbacks)
+                // Window Scaling & Scrim
                 val scale = 1f - (progress * 0.08f) 
                 binding.mainHost.scaleX = scale
                 binding.mainHost.scaleY = scale
-                binding.scrimLayer.alpha = progress * 0.65f // Heavier dark atmosphere
+                binding.scrimLayer.alpha = progress * 0.45f
                 
                 // 2. System Background Blur (API 31+)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val blurRadius = (progress * 180f).toInt()
+                    val blurRadius = (progress * 160f).toInt()
                     window.setBackgroundBlurRadius(blurRadius)
                 }
             }
@@ -144,7 +156,9 @@ class LauncherActivity : AppCompatActivity() {
                                 hidePagePicker()
                             }
                         }
+                        tryDismissFolder() -> Unit
                         tryConsumeBrowserBack() -> Unit
+                        tryConsumeFileExplorerBack() -> Unit
                         else -> {
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
@@ -157,8 +171,29 @@ class LauncherActivity : AppCompatActivity() {
 
         binding.pickerClose.setOnClickListener { hidePagePicker() }
         binding.pickerBack.setOnClickListener { showPickerPositionsStep(pendingPickerSlot) }
+        
+        binding.btnAddPageLeft.setOnClickListener { addPageAt(0) }
+        binding.btnAddPageRight.setOnClickListener { 
+            addPageAt(slotPreferences.getAssignments().size) 
+        }
 
         requestNotificationPermissionIfNeeded()
+        requestNotificationPermissionIfNeeded()
+    }
+
+    fun setBirdsEyeZoom(zoomOut: Boolean) {
+        val scale = if (zoomOut) 0.82f else 1.0f
+        binding.mainHost.animate()
+            .scaleX(scale)
+            .scaleY(scale)
+            .setDuration(300L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val blur = if (zoomOut) 140 else 0
+            window.setBackgroundBlurRadius(blur)
+        }
     }
 
     /**
@@ -180,6 +215,39 @@ class LauncherActivity : AppCompatActivity() {
 
     fun attachBrowserPage(page: BrowserPageView?) {
         browserPage = page
+    }
+
+    fun attachFileExplorerPage(page: com.prism.launcher.files.FileExplorerPageView?) {
+        fileExplorerPage = page
+    }
+
+    fun addToDesktop(absolutePath: String, label: String) {
+        val cells = desktopShortcutStore.readGrid(24)
+        val emptySlot = cells.indexOfFirst { it == null }
+        if (emptySlot != -1) {
+            val item = if (label == "prism_dir") {
+                DesktopItem.DirectoryRef(absolutePath, java.io.File(absolutePath).name)
+            } else {
+                DesktopItem.FileRef(absolutePath)
+            }
+            cells[emptySlot] = item
+            desktopShortcutStore.writeGrid(cells)
+            
+            // Refresh if visible
+            (findPageViewAt(findDesktopPosition()) as? DesktopGridPage)?.refreshFromStore()
+            
+            Toast.makeText(this, "Added to Desktop", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Desktop is full!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun tryConsumeFileExplorerBack(): Boolean {
+        return fileExplorerPage?.handleBack() ?: false
+    }
+
+    private fun tryConsumeBrowserBack(): Boolean {
+        return browserPage?.handleBack() ?: false
     }
 
     fun requestVpnPermission(intent: Intent) {
@@ -276,14 +344,37 @@ class LauncherActivity : AppCompatActivity() {
     }
 
     private fun showPickerPositionsStep(initialSlot: Int) {
-        pendingPickerSlot = initialSlot.coerceIn(0, 2)
+        pendingPickerSlot = initialSlot.coerceIn(0, mainAdapter.itemCount - 1)
         binding.pickerSubtitle.setText(R.string.page_picker_step_positions)
         binding.pickerBack.visibility = View.GONE
-        binding.pickerMainPager.adapter = PositionPickerAdapter(this) { slot ->
-            pendingPickerSlot = slot
-            showPickerOptionsStep()
-        }
+        binding.pickerMainPager.adapter = PositionPickerAdapter(
+            this, 
+            slotPreferences.getAssignments().size,
+            onContinueForPosition = { slot ->
+                pendingPickerSlot = slot
+                showPickerOptionsStep()
+            },
+            onDeletePosition = { pos ->
+                removePageAt(pos)
+                showPickerPositionsStep(pos.coerceAtMost(slotPreferences.getAssignments().size - 1))
+            }
+        )
         binding.pickerMainPager.setCurrentItem(pendingPickerSlot, false)
+    }
+
+    private fun removePageAt(index: Int) {
+        val list = slotPreferences.getAssignments().toMutableList()
+        if (list.size <= 1) return
+        list.removeAt(index)
+        slotPreferences.saveAssignments(list)
+        
+        mainAdapter.updateAssignments(list)
+        
+        // Re-align current item if needed
+        val current = binding.desktopPager.currentItem
+        if (current >= list.size) {
+            binding.desktopPager.setCurrentItem(list.size - 1, false)
+        }
     }
 
     private fun showPickerOptionsStep() {
@@ -317,28 +408,25 @@ class LauncherActivity : AppCompatActivity() {
     }
 
     private fun applySlotPick(slot: Int, choice: PagePickChoice) {
-        val slotIndex = SlotIndex.entries[slot.coerceIn(0, 2)]
         val assignment = when (choice) {
             PagePickChoice.BuiltIn -> SlotAssignment.Default
+            PagePickChoice.Browser -> SlotAssignment.Browser
+            PagePickChoice.DesktopGrid -> SlotAssignment.DesktopGrid
+            PagePickChoice.AppDrawer -> SlotAssignment.AppDrawer
             PagePickChoice.Messaging -> SlotAssignment.Messaging
             PagePickChoice.KineticHalo -> SlotAssignment.KineticHalo
+            PagePickChoice.FileExplorer -> SlotAssignment.FileExplorer
+            PagePickChoice.NebulaSocial -> SlotAssignment.NebulaSocial
             is PagePickChoice.PluginPage -> SlotAssignment.Custom(
                 choice.info.packageName,
                 choice.info.viewClassName,
             )
         }
-        slotPreferences.set(slotIndex, assignment)
-        mainAdapter.updateAssignments(slotPreferences.assignmentsInOrder())
+        slotPreferences.setAt(slot, assignment)
+        mainAdapter.updateAssignments(slotPreferences.getAssignments())
     }
 
-    private fun tryConsumeBrowserBack(): Boolean {
-        if (binding.desktopPager.currentItem != 0) return false
-        if (slotPreferences.get(SlotIndex.BROWSER) !is SlotAssignment.Default) return false
-        val browser = findPageViewAt(0) as? BrowserPageView ?: return false
-        return browser.handleBack()
-    }
-
-    private fun findPageViewAt(adapterPosition: Int): View? {
+    fun findPageViewAt(adapterPosition: Int): View? {
         val rv = binding.desktopPager.getChildAt(0) as? RecyclerView ?: return null
         val holder = rv.findViewHolderForAdapterPosition(adapterPosition) ?: return null
         if (holder !is MainDesktopPagerAdapter.PageHolder) return null
@@ -372,6 +460,162 @@ class LauncherActivity : AppCompatActivity() {
             }
         }
         return root
+    }
+
+
+    private fun tryDismissFolder(): Boolean {
+        val folderView = binding.root.findViewWithTag<FolderPopupView>("folder_popup")
+        if (folderView != null) {
+            // Try to go back within nested navigation first
+            if (folderView.handleBack()) return true
+            binding.root.removeView(folderView)
+            return true
+        }
+        return false
+    }
+
+    fun findDesktopPosition(): Int {
+        val list = slotPreferences.getAssignments()
+        val pos = list.indexOfFirst { it is SlotAssignment.DesktopGrid }
+        if (pos != -1) return pos
+        // Fallback for logic: find any slot that might be default if no specific grid is assigned
+        return list.indexOfFirst { it is SlotAssignment.Default } 
+    }
+
+    fun findDrawerPosition(): Int {
+        val list = slotPreferences.getAssignments()
+        return list.indexOfFirst { it is SlotAssignment.AppDrawer }
+    }
+
+    fun addToDesktop(item: DesktopItem) {
+        val list = slotPreferences.getAssignments()
+        
+        // Find all desktop page indices
+        val desktopIndices = list.indices.filter { 
+            list[it] is SlotAssignment.DesktopGrid || list[it] is SlotAssignment.Default 
+        }
+
+        if (desktopIndices.isEmpty()) {
+            android.widget.Toast.makeText(this, "No desktop page available", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Try adding to the current page if it's a desktop, otherwise find first with space
+        val current = binding.desktopPager.currentItem
+        val targetIndex = if (current in desktopIndices) current else desktopIndices.first()
+        
+        DesktopShortcutStore.add(this, item, targetIndex)
+        
+        // Refresh the targeted page if it's currently loaded
+        findPageViewAt(targetIndex)?.let { 
+            (it as? DesktopGridPage)?.refreshFromStore()
+        }
+        
+        android.widget.Toast.makeText(this, "Added to Page ${targetIndex + 1}", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    fun addPageAt(index: Int) {
+        val current = binding.desktopPager.currentItem
+        slotPreferences.addAt(index, SlotAssignment.DesktopGrid) // Default new to grid
+        val nextList = slotPreferences.getAssignments()
+        mainAdapter.updateAssignments(nextList)
+        
+        if (index <= current) {
+            // Keep user on the same physical page by shifting index
+            binding.desktopPager.setCurrentItem(current + 1, false)
+        }
+        
+        // Refresh picker if open
+        if (binding.pagePickerOverlay.visibility == View.VISIBLE) {
+            showPickerPositionsStep(if (index == 0) 0 else nextList.size -1)
+        }
+    }
+
+    fun switchToDesktop(delayMs: Long = 300L) {
+        val desktopPos = findDesktopPosition()
+        if (desktopPos != -1) {
+            binding.root.postDelayed({
+                binding.desktopPager.setCurrentItem(desktopPos, true)
+            }, delayMs)
+        }
+    }
+
+    private fun updateDesktopItem(folderId: String, newName: String) {
+        val cells = desktopShortcutStore.readGrid(24)
+        var changed = false
+        for (i in cells.indices) {
+            val item = cells[i]
+            if (item is DesktopItem.Folder && item.folderId == folderId) {
+                cells[i] = item.copy(name = newName)
+                changed = true
+                break
+            } else if (item is DesktopItem.DirectoryRef && item.absolutePath == folderId) {
+                // Directories use path as ID for simplicity
+                cells[i] = item.copy(name = newName)
+                changed = true
+                break
+            }
+        }
+        if (changed) {
+            desktopShortcutStore.writeGrid(cells)
+            // Refresh the current desktop page if visible
+            (findPageViewAt(binding.desktopPager.currentItem) as? DesktopGridPage)?.refreshFromStore()
+        }
+    }
+
+    fun openFile(absolutePath: String) {
+        val file = java.io.File(absolutePath)
+        if (!file.exists()) {
+            android.widget.Toast.makeText(this, "File missing", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val policy = android.os.StrictMode.VmPolicy.Builder().build()
+            android.os.StrictMode.setVmPolicy(policy)
+
+            val extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(absolutePath).lowercase()
+            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
+
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(android.net.Uri.fromFile(file), mimeType)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "No app found for this file", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun openFolder(item: DesktopItem) {
+        showFolderPopup(item)
+    }
+
+    fun showFolderPopup(folder: DesktopItem) {
+        val popup = FolderPopupView(
+            this,
+            folder,
+            onLaunchApp = { launchComponent(it) },
+            onLaunchFile = { openFile(it) },
+            onLaunchFolder = { openFolder(it) },
+            onRename = { newName ->
+                val id = when (folder) {
+                    is DesktopItem.Folder -> folder.folderId
+                    is DesktopItem.DirectoryRef -> folder.absolutePath
+                    else -> ""
+                }
+                updateDesktopItem(id, newName)
+            },
+            onDismiss = { tryDismissFolder() }
+        )
+        popup.tag = "folder_popup"
+
+        // Wire back button
+        val backBtn = popup.findViewWithTag<android.widget.ImageButton>("backBtn")
+        backBtn?.setOnClickListener {
+            val handled = popup.handleBack()
+            if (!handled) tryDismissFolder()
+        }
+
+        binding.root.addView(popup)
     }
 
     companion object {

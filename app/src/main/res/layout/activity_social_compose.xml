@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF0A0A0F"
+    android:orientation="vertical">
+
+    <!-- Header area -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:paddingHorizontal="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true"
+            android:text="Create Post"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="@android:color/white" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#22FFFFFF" />
+
+    <!-- Post Action Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/userAvatar"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:src="@android:drawable/ic_menu_gallery"
+            app:shapeAppearanceOverlay="@style/CircleImage"
+            android:padding="2dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/social_accent_green" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="You"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="80dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="4dp"
+                android:background="#22FFFFFF"
+                android:backgroundTint="#22FFFFFF"
+                android:paddingHorizontal="8dp">
+                <!-- Placeholder for Audience Selector -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Public"
+                    android:textColor="#A0FFFFFF"
+                    android:textSize="12sp" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="POST"
+            android:textColor="@android:color/white"
+            app:backgroundTint="@color/social_accent_green"
+            app:cornerRadius="24dp"
+            android:fontFamily="sans-serif-bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/composeInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="200dp"
+                android:background="@null"
+                android:gravity="top"
+                android:hint="What's on your mind?"
+                android:padding="16dp"
+                android:textColor="@android:color/white"
+                android:textColorHint="#60FFFFFF"
+                android:textSize="20sp" />
+
+            <!-- Preview Area -->
+            <FrameLayout
+                android:id="@+id/imagePreviewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="350dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#33FFFFFF"
+                    app:strokeWidth="1dp">
+
+                    <ImageView
+                        android:id="@+id/imgPreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop" />
+
+                    <ImageButton
+                        android:id="@+id/btnRemoveImage"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="top|end"
+                        android:layout_margin="12dp"
+                        android:background="#CC000000"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        app:tint="@android:color/white" />
+                </com.google.android.material.card.MaterialCardView>
+            </FrameLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Toolbar area -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#22FFFFFF" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:background="#16161D">
+
+        <ImageButton
+            android:id="@+id/btnAddImage"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_gallery"
+            app:tint="@color/social_accent_green" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:text="Add photo to your post"
+            android:textColor="@android:color/white"
+            android:fontFamily="sans-serif-medium" />
+            
+        <ImageButton
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_camera"
+            app:tint="#60FFFFFF" />
+            
+        <ImageButton
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_mylocation"
+            app:tint="#60FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout>

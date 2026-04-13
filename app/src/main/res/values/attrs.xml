@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="prismBackground" format="color" />
+    <attr name="prismSurface" format="color" />
+    <attr name="prismTextPrimary" format="color" />
+    <attr name="prismTextSecondary" format="color" />
+    <attr name="prismAccent" format="color" />
+    <attr name="prismCardColor" format="color" />
+    <attr name="prismDivider" format="color" />
+    <attr name="prismOverlay" format="color" />
+</resources>

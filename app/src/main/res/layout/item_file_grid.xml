@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <FrameLayout
+        android:id="@+id/iconContainer"
+        android:layout_width="86dp"
+        android:layout_height="86dp"
+        android:padding="4dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- This View will have the NeonGlowDrawable applied in code -->
+        <View
+            android:id="@+id/glassBackground"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ImageView
+            android:id="@+id/fileIcon"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="center"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/fileName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:lineSpacingExtra="2dp" />
+
+</LinearLayout>

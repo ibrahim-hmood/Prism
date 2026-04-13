@@ -101,4 +101,46 @@ object CloudAiService {
             "Network Error: ${e.message}"
         }
     }
+
+    /**
+     * Calls a DALL-E 3 compatible endpoint to generate a bitmap.
+     */
+    fun fetchImage(baseUrl: String, apiKey: String, prompt: String): android.graphics.Bitmap? {
+        return try {
+            val url = URL(baseUrl + "images/generations")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+
+            val body = JSONObject()
+            body.put("model", "dall-e-3")
+            body.put("prompt", prompt)
+            body.put("n", 1)
+            body.put("size", "1024x1024")
+            body.put("response_format", "b64_json")
+
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val responseString = conn.inputStream.bufferedReader().use { it.readText() }
+                val responseJson = JSONObject(responseString)
+                val data = responseJson.getJSONArray("data")
+                if (data.length() > 0) {
+                    val b64 = data.getJSONObject(0).getString("b64_json")
+                    val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                } else null
+            } else {
+                val error = conn.errorStream?.bufferedReader()?.readText()
+                Log.e("CloudAi", "Image Gen Failed: $error")
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 }

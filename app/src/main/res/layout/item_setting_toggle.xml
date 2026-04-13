@@ -22,7 +22,7 @@
             android:id="@+id/itemTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/prism_text_primary"
+            android:textColor="?attr/prismTextPrimary"
             android:textSize="16sp" />
 
         <TextView
@@ -30,7 +30,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:textColor="@color/prism_text_muted"
+            android:textColor="?attr/prismTextSecondary"
             android:textSize="13sp" />
     </LinearLayout>
 
@@ -39,5 +39,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
         app:useMaterialThemeColors="true" />
 </LinearLayout>

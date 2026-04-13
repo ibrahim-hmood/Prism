@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="8dp"
+    app:cardBackgroundColor="@color/prism_surface"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeColor="#33FFFFFF"
+    app:strokeWidth="1dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <View
+            android:id="@+id/sweepLayer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_menu_gallery"
+                android:id="@+id/siteIcon"
+                app:tint="@color/prism_accent" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/siteDomain"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="example.p2p"
+                    android:textColor="@color/prism_text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/sitePath"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:text="/storage/emulated/0/Web"
+                    android:textColor="@color/prism_text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/siteToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+                
+            <ImageView
+                android:id="@+id/deleteSiteBtn"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@android:drawable/ic_menu_delete"
+                app:tint="#66FFFFFF" />
+        </LinearLayout>
+    </FrameLayout>
+</com.google.android.material.card.MaterialCardView>

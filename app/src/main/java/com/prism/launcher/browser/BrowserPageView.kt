@@ -92,6 +92,23 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
         }
 
         host.attachBrowserPage(this)
+
+        // Observe P2P DNS Resolution State
+        (context as? LifecycleOwner)?.lifecycleScope?.launchWhenStarted {
+            P2pDnsManager.resolutionState.collect { states ->
+                val activeTab = tabs.firstOrNull { it.id == activeTabId } ?: return@collect
+                val hostName = try { java.net.URL(activeTab.lastUrl).host } catch (e: Exception) { null }
+                val source = states[hostName] ?: P2pDnsManager.ResolutionSource.UNKNOWN
+                
+                binding.dnsSourceIcon.setImageResource(
+                    when (source) {
+                        P2pDnsManager.ResolutionSource.P2P -> R.drawable.ic_handshake_24
+                        else -> R.drawable.ic_globe_24
+                    }
+                )
+                binding.dnsSourceIcon.alpha = if (source == P2pDnsManager.ResolutionSource.P2P) 1.0f else 0.6f
+            }
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -178,6 +195,7 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
         val client = PrismWebViewClient(
             blocklist = blocklist,
             isPrivateTab = isPrivate,
+            getEngine = { (context.applicationContext as? com.prism.launcher.PrismApp)?.tunnelEngine },
             onTitle = { t ->
                 post {
                     val tab = tabs.firstOrNull { it.webView === wv } ?: return@post
@@ -294,32 +312,48 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
     }
 
     private fun navigate(field: EditText) {
-        var url = field.text?.toString()?.trim().orEmpty()
-        if (url.isEmpty()) return
-        if (!url.contains("://")) {
-            url = PrismSettings.buildSearchUrl(context, url)
+        var input = field.text?.toString()?.trim().orEmpty()
+        if (input.isEmpty()) return
+
+        var url = input
+        val looksLikeUrl = input.contains("://") || (input.contains(".") && !input.contains(" "))
+
+        if (!looksLikeUrl) {
+            url = PrismSettings.buildSearchUrl(context, input)
+        } else if (!input.contains("://")) {
+            // Default to https for standard browsing, but allow P2P resolution to handle the IP
+            url = "https://$input"
         }
+
         val active = tabs.firstOrNull { it.id == activeTabId } ?: return
         active.lastUrl = url
         active.webView.loadUrl(url, privateHeaders(active.isPrivate))
     }
 
     private fun applyVpnForTab(tab: Tab?) {
-        val wants = tab?.isPrivate == true
-        if (wants == lastVpnStateWants) return
-        lastVpnStateWants = wants
+        val wantsPrivateTunnel = tab?.isPrivate == true
+        if (wantsPrivateTunnel == lastVpnStateWants) return
+        lastVpnStateWants = wantsPrivateTunnel
 
-        if (!wants) {
-            PrivateDnsVpnService.stop(context.applicationContext)
-            return
+        if (wantsPrivateTunnel) {
+            val autoStart = PrismSettings.getVpnAutoStart(context)
+            if (!autoStart) return
+            
+            val prep = VpnService.prepare(host)
+            if (prep != null) {
+                host.requestVpnPermission(prep)
+                return
+            }
+            // Establish Full Privacy Tunnel
+            PrivateDnsVpnService.start(context, true)
+        } else {
+            // Downgrade to Backbone-Only Mode (Clears 'Key' icon and Ad-blocking)
+            val alwaysOn = PrismSettings.getVpnServerAlwaysOn(context)
+            if (alwaysOn) {
+                PrivateDnsVpnService.start(context, true) // Maintain tunnel if persistent
+            } else {
+                PrivateDnsVpnService.stop(context) // Fully stop VPN if not persistent
+            }
         }
-        val autoStart = PrismSettings.getVpnAutoStart(context)
-        if (!autoStart) return
-        val prep = VpnService.prepare(host)
-        if (prep != null) {
-            host.requestVpnPermission(prep)
-            return
-        }
-        PrivateDnsVpnService.start(context.applicationContext)
     }
 }

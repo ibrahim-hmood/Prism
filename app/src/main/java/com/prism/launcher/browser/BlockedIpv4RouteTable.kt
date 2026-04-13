@@ -17,8 +17,8 @@ import java.util.Locale
 object BlockedIpv4RouteTable {
     private const val TAG = "BlockedIpv4RouteTable"
 
-    const val MAX_HOSTS_TO_RESOLVE = 450
-    const val MAX_UNIQUE_IPS = 400
+    const val MAX_HOSTS_TO_RESOLVE = 100
+    const val MAX_UNIQUE_IPS = 100
 
     fun compute(context: Context, blocklist: HostBlocklist): RouteComputation {
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

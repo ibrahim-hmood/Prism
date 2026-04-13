@@ -6,12 +6,23 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.prism.launcher.messaging.*
 
-@Database(entities = [InstalledAppEntity::class, AppLaunchStatEntity::class, AiMessageEntity::class], version = 5, exportSchema = false)
+@Database(entities = [
+    InstalledAppEntity::class, 
+    AppLaunchStatEntity::class, 
+    AiMessageEntity::class,
+    com.prism.launcher.social.SocialPostEntity::class,
+    com.prism.launcher.social.SocialBotEntity::class,
+    com.prism.launcher.social.SocialMessageEntity::class,
+    com.prism.launcher.social.SocialCommentEntity::class,
+    com.prism.launcher.social.SocialFollowEntity::class,
+    com.prism.launcher.social.SocialInteractionEntity::class
+], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun installedAppDao(): InstalledAppDao
     abstract fun appLaunchStatDao(): AppLaunchStatDao
     abstract fun aiMessageDao(): AiMessageDao
+    abstract fun socialDao(): com.prism.launcher.social.SocialDao
 
     companion object {
         @Volatile

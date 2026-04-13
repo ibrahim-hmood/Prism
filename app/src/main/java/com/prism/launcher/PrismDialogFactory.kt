@@ -1,20 +1,13 @@
 package com.prism.launcher
 
-import android.app.Dialog
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
-import android.view.LayoutInflater
 import android.view.View
-import android.view.Window
-import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import com.prism.launcher.databinding.LayoutPrismDialogBinding
+import androidx.appcompat.app.AlertDialog
 
-/**
- * Factory for creating high-fidelity Neon Prism dialogs with blur and glow.
- */
 object PrismDialogFactory {
 
     fun show(
@@ -23,88 +16,76 @@ object PrismDialogFactory {
         message: String,
         positiveText: String? = "OK",
         negativeText: String? = "Cancel",
-        showProgress: Boolean = false,
-        customView: View? = null,
         onPositive: (() -> Unit)? = null,
-        onNegative: (() -> Unit)? = null
-    ): Dialog {
-        val dialog = Dialog(context)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        
-        val binding = LayoutPrismDialogBinding.inflate(LayoutInflater.from(context))
-        dialog.setContentView(binding.root)
-
-        val glowColor = PrismSettings.getGlowColor(context)
-
-        // Setup Window Style with Gaussian Blur (API 31+)
-        dialog.window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
-            
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                setBackgroundBlurRadius(180)
-                attributes.blurBehindRadius = 180
-                addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            } else {
-                // Fallback: Heavier dim for older versions
-                setDimAmount(0.7f)
-            }
+        onNegative: (() -> Unit)? = null,
+        showProgress: Boolean = false,
+        customView: View? = null
+    ): AlertDialog {
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(resolveAttr(context, R.attr.prismSurface))
+            val p = (24 * resources.displayMetrics.density).toInt()
+            setPadding(p, p / 2, p, p)
         }
 
-        // 2. Neon Glow Border
-        val radius = 24f * context.resources.displayMetrics.density
-        binding.dialogGlowFrame.background = NeonGlowDrawable(glowColor, radius)
-        
-        // Setup Content
-        binding.dialogTitle.text = title
-        binding.dialogMessage.text = message
-        
-        if (positiveText != null) {
-            binding.dialogPositiveBtn.text = positiveText
-            binding.dialogPositiveBtn.setOnClickListener {
-                onPositive?.invoke()
-                dialog.dismiss()
+        if (message.isNotEmpty()) {
+            val tv = TextView(context).apply {
+                text = message
+                setTextColor(resolveAttr(context, R.attr.prismTextPrimary))
+                textSize = 16f
             }
-        } else {
-            binding.dialogPositiveBtn.visibility = View.GONE
-        }
-
-        if (negativeText != null) {
-            binding.dialogNegativeBtn.text = negativeText
-            binding.dialogNegativeBtn.setOnClickListener {
-                onNegative?.invoke()
-                dialog.dismiss()
-            }
-        } else {
-            binding.dialogNegativeBtn.visibility = View.GONE
+            root.addView(tv)
         }
 
         if (showProgress) {
-            binding.dialogProgress.visibility = View.VISIBLE
-            // Color the progress bar to match the glow
-            binding.dialogProgress.progressDrawable?.setTint(glowColor)
+            val pb = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+                id = R.id.tag_prism_launcher_app_target // Reuse a known ID for finding it later or use a custom one
+                isIndeterminate = false
+                max = 100
+                progress = 0
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.topMargin = (16 * resources.displayMetrics.density).toInt()
+                layoutParams = lp
+            }
+            // Use a specific tag instead of a random ID for reliable finding
+            pb.tag = "prism_progress_bar"
+            root.addView(pb)
         }
 
         if (customView != null) {
-            binding.dialogCustomView.visibility = View.VISIBLE
-            binding.dialogCustomView.addView(customView)
+            val container = FrameLayout(context).apply {
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.topMargin = (16 * resources.displayMetrics.density).toInt()
+                layoutParams = lp
+            }
+            container.addView(customView)
+            root.addView(container)
         }
 
+        val builder = AlertDialog.Builder(context, R.style.Theme_PrismSettings)
+            .setTitle(title)
+            .setView(root)
+
+        if (positiveText != null) {
+            builder.setPositiveButton(positiveText) { _, _ -> onPositive?.invoke() }
+        }
+        if (negativeText != null) {
+            builder.setNegativeButton(negativeText) { _, _ -> onNegative?.invoke() }
+        }
+
+        val dialog = builder.create()
         dialog.show()
         return dialog
     }
 
-    /**
-     * Update the progress bar inside a dialog created by this factory.
-     */
-    fun updateProgress(dialog: Dialog, progress: Int, message: String? = null) {
-        dialog.findViewById<ProgressBar>(R.id.dialogProgress)?.let {
-            it.progress = progress
-        }
-        if (message != null) {
-            dialog.findViewById<TextView>(R.id.dialogMessage)?.let {
-                it.text = message
-            }
-        }
+    fun updateProgress(dialog: AlertDialog, percentage: Int) {
+        val pb = dialog.window?.decorView?.findViewWithTag<ProgressBar>("prism_progress_bar")
+        pb?.progress = percentage
+    }
+
+    private fun resolveAttr(context: Context, attr: Int): Int {
+        val typedValue = android.util.TypedValue()
+        context.theme.resolveAttribute(attr, typedValue, true)
+        return typedValue.data
     }
 }

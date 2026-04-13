@@ -9,10 +9,10 @@
         android:id="@+id/optionCard"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardBackgroundColor="@color/prism_surface"
+        app:cardBackgroundColor="?attr/prismCardColor"
         app:cardCornerRadius="20dp"
         app:cardElevation="0dp"
-        app:strokeColor="#44FFFFFF"
+        app:strokeColor="?attr/prismDivider"
         app:strokeWidth="1dp">
 
         <LinearLayout
@@ -27,7 +27,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textColor="@color/prism_text_primary"
+                android:textColor="?attr/prismTextPrimary"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
@@ -37,7 +37,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center"
-                android:textColor="@color/prism_text_muted"
+                android:textColor="?attr/prismTextSecondary"
                 android:textSize="14sp" />
 
             <com.google.android.material.button.MaterialButton

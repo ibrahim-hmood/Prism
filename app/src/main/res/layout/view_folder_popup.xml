@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/folderPopupRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#99000000"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/folderCard"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_margin="32dp"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:elevation="12dp">
+
+        <!-- Thin back arrow — hidden at root, shown when browsing nested folders -->
+        <ImageButton
+            android:id="@+id/folderBackBtn"
+            android:tag="backBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginBottom="4dp"
+            android:background="@null"
+            android:src="@drawable/ic_back_arrow"
+            android:tint="@android:color/white"
+            android:alpha="0.7"
+            android:visibility="gone"
+            android:padding="4dp"
+            android:contentDescription="Back" />
+
+        <EditText
+            android:id="@+id/folderTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:imeOptions="actionDone"
+            android:inputType="textCapWords"
+            android:focusable="false"
+            android:focusableInTouchMode="false"
+            android:layout_marginBottom="16dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/folderGrid"
+            android:layout_width="match_parent"
+            android:layout_height="320dp"
+            android:clipToPadding="false"
+            android:padding="8dp" />
+
+    </LinearLayout>
+
+</FrameLayout>
+
