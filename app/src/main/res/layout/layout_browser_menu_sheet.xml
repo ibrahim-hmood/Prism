@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/prismSurface"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Handle for BottomSheet -->
+    <View
+        android:layout_width="32dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="?attr/prismDivider" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginBottom="12dp"
+        android:text="Browser Actions"
+        android:textColor="?attr/prismTextSecondary"
+        android:textSize="12sp"
+        android:textAllCaps="true"
+        android:letterSpacing="0.1" />
+
+    <!-- Reload Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/menuReload"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginBottom="8dp"
+        android:gravity="start|center_vertical"
+        android:text="Reload Page"
+        android:textColor="?attr/prismTextPrimary"
+        app:icon="@drawable/ic_refresh_24"
+        app:iconGravity="textStart"
+        app:iconPadding="16dp"
+        app:iconTint="?attr/prismTextPrimary" />
+
+    <!-- Mirror Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/menuMirror"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="start|center_vertical"
+        android:text="Mirror Site"
+        android:textColor="?attr/prismTextPrimary"
+        app:icon="@drawable/ic_handshake_24"
+        app:iconGravity="textStart"
+        app:iconPadding="16dp"
+        app:iconTint="?attr/prismTextPrimary" />
+
+</LinearLayout>

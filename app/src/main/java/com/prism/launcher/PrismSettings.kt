@@ -6,6 +6,7 @@ import com.prism.launcher.vpn.VpnMultiplexer
 import com.prism.launcher.vpn.WireguardController
 import com.wireguard.crypto.Key
 import com.wireguard.crypto.KeyPair
+import java.io.File
 
 /**
  * Typed, centralized access to all user-configurable Prism settings.
@@ -364,6 +365,40 @@ object PrismSettings {
         prefs(ctx).edit().putString(KEY_P2P_HOSTED_SITES, encoded).apply()
     }
 
+    // ── Mesh Mirroring (P2P CDN) ──────────────────────────────────────────
+
+    data class P2pMirroredSite(
+        val domain: String,
+        val localPath: String,
+        val originalHost: String,
+        val lastSync: Long,
+        var isActive: Boolean = true
+    )
+
+    fun getP2pMirroredSites(ctx: Context): List<P2pMirroredSite> {
+        val raw = prefs(ctx).getString(KEY_P2P_MIRRORED_SITES, "") ?: ""
+        if (raw.isEmpty()) return emptyList()
+        
+        return raw.split(";;;").filter { it.isNotEmpty() }.mapNotNull { line ->
+            val p = line.split("::")
+            if (p.size < 5) null else P2pMirroredSite(p[0], p[1], p[2], p[3].toLong(), p[4] == "1")
+        }
+    }
+
+    fun setP2pMirroredSites(ctx: Context, sites: List<P2pMirroredSite>) {
+        val encoded = sites.joinToString(";;;") { 
+            "${it.domain}::${it.localPath}::${it.originalHost}::${it.lastSync}::${if(it.isActive) "1" else "0"}"
+        }
+        prefs(ctx).edit().putString(KEY_P2P_MIRRORED_SITES, encoded).apply()
+    }
+
+    fun getMirrorsDir(ctx: Context): java.io.File {
+        val storage = android.os.Environment.getExternalStorageDirectory()
+        val mirrors = java.io.File(storage, "Prism/Mirrors")
+        if (!mirrors.exists()) mirrors.mkdirs()
+        return mirrors
+    }
+
     // ── Networked Storage ───────────────────────────────────────────────────
 
     data class NetworkStorage(
@@ -403,6 +438,14 @@ object PrismSettings {
 
     const val AI_MODE_LOCAL = "local"
     const val AI_MODE_CLOUD = "cloud"
+    
+    private const val KEY_AUTO_MIRROR = "browser_auto_mirror"
+
+    fun getAutoMirror(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_AUTO_MIRROR, false)
+
+    fun setAutoMirror(ctx: Context, value: Boolean) =
+        prefs(ctx).edit().putBoolean(KEY_AUTO_MIRROR, value).apply()
 
     fun getAiMode(ctx: Context): String =
         prefs(ctx).getString(KEY_AI_MODE, AI_MODE_LOCAL) ?: AI_MODE_LOCAL
@@ -505,6 +548,7 @@ object PrismSettings {
     private const val KEY_MESH_BOOTSTRAP_ADDRESS = "mesh_bootstrap_address"
     private const val KEY_MESH_BOOTSTRAP_PORT    = "mesh_bootstrap_port"
     private const val KEY_P2P_HOSTED_SITES       = "p2p_hosted_sites"
+    private const val KEY_P2P_MIRRORED_SITES     = "p2p_mirrored_sites"
     private const val KEY_NETWORK_STORAGES       = "network_storages"
     private const val KEY_FONT_STYLE             = "font_style"
     private const val KEY_CUSTOM_FONT_PATH       = "custom_font_path"

@@ -58,9 +58,11 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
         binding.tabsRecycler.adapter = tabsAdapter
 
         binding.tabsButton.setOnClickListener { openTabsOverlay() }
-        binding.newTabButton.setOnClickListener { addTab(isPrivate = activeCategoryIsPrivate) }
+        binding.addStandardTabBtn.setOnClickListener { addTab(isPrivate = false) }
+        binding.addPrivateTabBtn.setOnClickListener { addTab(isPrivate = true) }
+        binding.goButton.setOnClickListener { navigate(binding.urlField) }
+        binding.browserMenuButton.setOnClickListener { showBrowserMenu() }
         binding.tabsDone.setOnClickListener { closeTabsOverlay() }
-        binding.tabsOverlay.setOnClickListener { closeTabsOverlay() }
 
         binding.tabCategoryGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -212,6 +214,15 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
                     if (tab.id == activeTabId) {
                         binding.urlField.setText(u)
                     }
+                    // Auto-Mirror logic
+                    if (PrismSettings.getAutoMirror(context)) {
+                        val hostName = try { java.net.URL(u).host } catch (e: Exception) { null }
+                        if (hostName != null && P2pDnsManager.isP2pDomain(hostName)) {
+                            (context.applicationContext as? com.prism.launcher.PrismApp)?.tunnelEngine?.let { engine ->
+                                PrismMirrorManager.mirrorSite(context, engine, hostName)
+                            }
+                        }
+                    }
                 }
             },
         )
@@ -285,6 +296,36 @@ class BrowserPageView(context: Context) : FrameLayout(context) {
             )
         }
         tabsAdapter.submitList(cards)
+
+        // Visibility toggle for Add buttons based on category
+        binding.addStandardTabBtn.isVisible = !activeCategoryIsPrivate
+        binding.addPrivateTabBtn.isVisible = activeCategoryIsPrivate
+    }
+
+    private fun showBrowserMenu() {
+        val active = tabs.firstOrNull { it.id == activeTabId } ?: return
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(context)
+        val sheetBinding = com.prism.launcher.databinding.LayoutBrowserMenuSheetBinding.inflate(LayoutInflater.from(context))
+        
+        sheetBinding.menuReload.setOnClickListener {
+            active.webView.reload()
+            dialog.dismiss()
+        }
+        
+        val hostName = try { java.net.URL(active.lastUrl).host } catch (e: Exception) { "" }
+        val isP2p = P2pDnsManager.isP2pDomain(hostName)
+        
+        sheetBinding.menuMirror.isEnabled = isP2p
+        sheetBinding.menuMirror.alpha = if (isP2p) 1.0f else 0.5f
+        sheetBinding.menuMirror.setOnClickListener {
+            (context.applicationContext as? com.prism.launcher.PrismApp)?.tunnelEngine?.let { engine ->
+                PrismMirrorManager.mirrorSite(context, engine, hostName)
+            }
+            dialog.dismiss()
+        }
+        
+        dialog.setContentView(sheetBinding.root)
+        dialog.show()
     }
 
     private fun closeTabsOverlay() {

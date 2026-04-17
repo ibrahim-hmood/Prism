@@ -20,6 +20,8 @@ import java.util.Locale
 import java.util.TimeZone
 import androidx.documentfile.provider.DocumentFile
 import com.prism.launcher.messaging.AiManager
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
@@ -44,60 +46,87 @@ object PrismWebHost {
             val site = sites.find { it.domain.equals(domain, ignoreCase = true) && it.isActive }
             
             if (site == null) {
-                sendError(output, 404, "Site Not Found: $domain")
+                // Secondary Check: Mirror Registry (P2P CDN)
+                val mirrors = com.prism.launcher.PrismSettings.getP2pMirroredSites(context)
+                val mirror = mirrors.find { it.domain.equals(domain, ignoreCase = true) && it.isActive }
+                
+                if (mirror == null) {
+                    sendError(output, 404, "Site Not Found: $domain")
+                    return@withContext
+                }
+                
+                // We found a mirror! Serve it using the mirror's local path.
+                serveContent(context, socket, input, output, domain, mirror.localPath, preReadHeader)
                 return@withContext
             }
 
-            // Read the HTTP request (Simple parsing for GET)
-            val header = preReadHeader ?: readLine(input) ?: return@withContext
-            Log.d(TAG, "Serving Request for $domain: ${header.substringBefore("\n")}")
-            
-            val lines = header.lines()
-            val requestLine = lines[0]
-            val parts = requestLine.split(" ")
-            if (parts.size < 2) return@withContext
-            
-            val method = parts[0]
-            var path = parts[1]
-
-            if (method != "GET") {
-                sendError(output, 405, "Method Not Allowed")
-                return@withContext
-            }
-
-            if (path.contains("..")) {
-                sendError(output, 403, "Forbidden")
-                return@withContext
-            }
-
-            if (path == "/") path = "/index.html"
-            
-            // 2. Cache Check: Fast-path for repeated requests (icons, CSS, etc)
-            val domainCache = synchronized(cacheMutex) {
-                siteCache.getOrPut(domain) { mutableMapOf() }
-            }
-            
-            val cachedResult = domainCache[path]
-            if (cachedResult != null) {
-                handleFileResult(context, output, cachedResult, path)
-                return@withContext
-            }
-            
-            val rootUri = Uri.parse(site.localPath)
-            val fileResult = resolveFile(context, rootUri, path)
-            
-            if (fileResult != null) {
-                synchronized(cacheMutex) { domainCache[path] = fileResult }
-                handleFileResult(context, output, fileResult, path)
-            } else {
-                // Negative cache to prevent repeated scanning of missing files
-                synchronized(cacheMutex) { domainCache[path] = "NULL_MARKER" }
-                handleMissingFile(context, output, path)
-            }
+            serveContent(context, socket, input, output, domain, site.localPath, preReadHeader)
         } catch (e: Exception) {
             com.prism.launcher.PrismLogger.logError(TAG, "Serving error for $domain", e)
         } finally {
             runCatching { socket.close() }
+        }
+    }
+
+    private suspend fun serveContent(
+        context: Context, 
+        socket: Socket, 
+        input: InputStream, 
+        output: OutputStream, 
+        domain: String, 
+        localPath: String, 
+        preReadHeader: String?
+    ) {
+        // Read the HTTP request (Simple parsing for GET)
+        val header = preReadHeader ?: readLine(input) ?: return
+        
+        val lines = header.lines()
+        val requestLine = lines[0]
+        val parts = requestLine.split(" ")
+        if (parts.size < 2) return
+        
+        val method = parts[0]
+        var path = parts[1]
+
+        if (method != "GET") {
+            sendError(output, 405, "Method Not Allowed")
+            return
+        }
+
+        if (path.contains("..")) {
+            sendError(output, 403, "Forbidden")
+            return
+        }
+
+        if (path == "/") path = "/index.html"
+        
+        // Mesh Mirroring: Virtual Manifest Generation
+        if (path == "/manifest.json") {
+            sendManifest(context, output, domain, localPath)
+            return
+        }
+        
+        // Cache Check: Fast-path for repeated requests (icons, CSS, etc)
+        val domainCache = synchronized(cacheMutex) {
+            siteCache.getOrPut(domain) { mutableMapOf() }
+        }
+        
+        val cachedResult = domainCache[path]
+        if (cachedResult != null) {
+            handleFileResult(context, output, cachedResult, path)
+            return
+        }
+        
+        val rootUri = Uri.parse(localPath)
+        val fileResult = resolveFile(context, rootUri, path)
+        
+        if (fileResult != null) {
+            synchronized(cacheMutex) { domainCache[path] = fileResult }
+            handleFileResult(context, output, fileResult, path)
+        } else {
+            // Negative cache to prevent repeated scanning of missing files
+            synchronized(cacheMutex) { domainCache[path] = "NULL_MARKER" }
+            handleMissingFile(context, output, path)
         }
     }
 
@@ -299,6 +328,84 @@ object PrismWebHost {
             }
         }
         output.flush()
+    }
+
+    private suspend fun sendManifest(context: Context, output: OutputStream, domain: String, localPath: String) {
+        val json = org.json.JSONObject()
+        json.put("domain", domain)
+        json.put("timestamp", System.currentTimeMillis())
+        
+        val filesArray = org.json.JSONArray()
+        val rootUri = Uri.parse(localPath)
+        
+        val files = mutableListOf<Pair<String, Any>>()
+        collectFiles(context, rootUri, "", files)
+        
+        for (f in files) {
+            val fileObj = org.json.JSONObject()
+            fileObj.put("path", f.first)
+            fileObj.put("size", when(val res = f.second) {
+                is File -> res.length()
+                is DocumentFile -> res.length()
+                else -> 0L
+            })
+            fileObj.put("hash", getFileHash(context, f.second))
+            filesArray.put(fileObj)
+        }
+        
+        json.put("files", filesArray)
+        val body = json.toString()
+        
+        val response = StringBuilder()
+        response.append("HTTP/1.1 200 OK\r\n")
+        response.append("Content-Type: application/json\r\n")
+        response.append("Content-Length: ${body.toByteArray().size}\r\n")
+        response.append("Connection: close\r\n")
+        response.append("\r\n")
+        response.append(body)
+        
+        output.write(response.toString().toByteArray())
+        output.flush()
+    }
+
+    private fun collectFiles(context: Context, uri: Uri, relativePath: String, out: MutableList<Pair<String, Any>>) {
+        val doc = if (relativePath.isEmpty()) DocumentFile.fromTreeUri(context, uri) else {
+            // This is simplified; real implementation would need to resolve segments
+            null 
+        }
+        
+        // Better: Use File API if it's a local storage path
+        var baseDir = uri.path ?: ""
+        if (baseDir.startsWith("/tree/primary:")) baseDir = baseDir.replace("/tree/primary:", "/storage/emulated/0/")
+        else if (baseDir.startsWith("/document/primary:")) baseDir = baseDir.replace("/document/primary:", "/storage/emulated/0/")
+        
+        val root = File(baseDir)
+        if (root.exists() && root.isDirectory) {
+            root.walkTopDown().filter { it.isFile }.forEach { file ->
+                val rel = file.absolutePath.removePrefix(root.absolutePath).replace("\\", "/")
+                out.add(rel.removePrefix("/") to file)
+            }
+        }
+    }
+
+    private fun getFileHash(context: Context, source: Any): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(16384)
+            val stream = when (source) {
+                is File -> source.inputStream()
+                is DocumentFile -> context.contentResolver.openInputStream(source.uri)
+                else -> null
+            }
+            
+            stream?.use { 
+                var read: Int
+                while (it.read(buffer).also { r -> read = r } != -1) {
+                    md.update(buffer, 0, read)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) { "" }
     }
 
     private fun sendError(output: OutputStream, code: Int, message: String) {

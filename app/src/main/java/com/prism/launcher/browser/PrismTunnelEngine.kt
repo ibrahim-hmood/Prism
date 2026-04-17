@@ -113,6 +113,21 @@ class PrismTunnelEngine(private val context: Context) {
                     }
                 }
             })
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val originalHost = request.url.host
+                if (originalHost.endsWith(".remote", ignoreCase = true)) {
+                    val cleanHost = originalHost.removeSuffix(".remote")
+                    val newUrl = request.url.newBuilder().host(cleanHost).build()
+                    val newRequest = request.newBuilder()
+                        .url(newUrl)
+                        .header("Host", cleanHost)
+                        .build()
+                    chain.proceed(newRequest)
+                } else {
+                    chain.proceed(request)
+                }
+            }
             .sslSocketFactory(noSniSslFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
             .socketFactory(object : SocketFactory() {

@@ -88,8 +88,10 @@ class DiscoveryEngine(private val context: android.content.Context, private val 
                 val obj = json.getJSONObject(domain)
                 records[domain] = com.prism.launcher.browser.P2pDnsManager.DnsRecord(
                     obj.getString("ip"),
+                    emptySet(),
                     obj.getLong("ts"),
-                    obj.optBoolean("v", false)
+                    obj.optBoolean("v", false),
+                    com.prism.launcher.browser.P2pDnsManager.ResolutionSource.P2P
                 )
             }
             // Context is tricky here, might need to pass it or use a global one.

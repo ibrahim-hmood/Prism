@@ -263,9 +263,16 @@ object PrismMeshService {
                 val obj = dnsObj.getJSONObject(domain)
                 val srcStr = obj.optString("src", P2pDnsManager.ResolutionSource.P2P.name)
                 val source = try { P2pDnsManager.ResolutionSource.valueOf(srcStr) } catch (e: Exception) { P2pDnsManager.ResolutionSource.P2P }
-                
+
+                val altArray = obj.optJSONArray("alts")
+                val alts = mutableSetOf<String>()
+                if (altArray != null) {
+                    for (i in 0 until altArray.length()) alts.add(altArray.getString(i))
+                }
+
                 peerRecords[domain] = P2pDnsManager.DnsRecord(
                     obj.getString("ip"),
+                    alts,
                     obj.getLong("ts"),
                     obj.optBoolean("v", false),
                     source
@@ -275,17 +282,45 @@ object PrismMeshService {
         P2pDnsManager.ingestFromPeer(PrismApp.instance, peerRecords)
     }
 
+    fun broadcastDnsUpdate(domain: String) {
+        val records = P2pDnsManager.getRecords()
+        val record = records[domain] ?: return
+        
+        val myIp = MeshUtils.getLocalMeshIp(PrismApp.instance)
+        val broadcastIp = if (record.ip == "127.0.0.1") myIp else record.ip
+
+        val payload = JSONObject().apply {
+            put("domain", domain)
+            put("ip", broadcastIp)
+            put("ts", record.timestamp)
+            val publicAlts = record.alternates.filter { it != "127.0.0.1" }
+            if (publicAlts.isNotEmpty()) put("alts", org.json.JSONArray(publicAlts))
+        }.toString()
+        
+        broadcastToOthers(0x05.toByte(), payload)
+    }
+
     private fun getLocalDnsJson(): JSONObject {
         val dnsJson = JSONObject()
+        val myIp = MeshUtils.getLocalMeshIp(PrismApp.instance)
         P2pDnsManager.getRecords().forEach { (domain, record) ->
             dnsJson.put(domain, JSONObject().apply {
-                put("ip", record.ip)
+                val broadcastIp = if (record.ip == "127.0.0.1") myIp else record.ip
+                put("ip", broadcastIp)
                 put("ts", record.timestamp)
                 put("v", record.isVerified)
                 put("src", record.source.name)
+                
+                val publicAlts = record.alternates.filter { it != "127.0.0.1" }.toMutableSet()
+                if (record.ip == "127.0.0.1" && broadcastIp != record.ip) {
+                   // no-op, already primary
+                }
+                
+                if (publicAlts.isNotEmpty()) {
+                    put("alts", org.json.JSONArray(publicAlts.toList()))
+                }
             })
         }
-        val myIp = MeshUtils.getLocalMeshIp(PrismApp.instance)
         PrismSettings.getP2pHostedSites(PrismApp.instance).forEach { site ->
             if (!dnsJson.has(site.domain)) {
                 dnsJson.put(site.domain, JSONObject().apply {

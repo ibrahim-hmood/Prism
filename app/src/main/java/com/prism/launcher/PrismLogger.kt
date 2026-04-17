@@ -90,6 +90,9 @@ object PrismLogger {
 
     private fun writeToFile(entry: LogEntry) {
         try {
+            val storage = Environment.getExternalStorageDirectory()
+            val prismDir = File(storage, "Prism")
+            if (!prismDir.exists()) prismDir.mkdirs()
             logFile?.let { file ->
                 FileWriter(file, true).use { writer ->
                     writer.write("[${entry.timestamp}] [${entry.level}] [${entry.tag}] ${entry.message}\n")
