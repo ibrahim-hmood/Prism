@@ -32,6 +32,10 @@ class PrismApp : Application() {
 
         // Start the AI Social Media Bot cycle
         com.prism.launcher.social.SocialBotWorker.schedule(this)
+
+        // Decentralized Mesh Components
+        com.prism.launcher.browser.P2pDnsManager.init(this)
+        com.prism.launcher.mesh.PrismMeshService.start()
     }
 
     companion object {

@@ -2,6 +2,7 @@ package com.prism.launcher
 
 import android.content.Context
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.NetworkInterface
 
 object MeshUtils {
@@ -34,6 +35,52 @@ object MeshUtils {
             ex.printStackTrace()
         }
         return "127.0.0.1"
+    }
+
+    /**
+     * Returns all IPv4 addresses assigned to this device across all interfaces.
+     */
+    fun getAllLocalIps(): Set<String> {
+        val ips = mutableSetOf("127.0.0.1", "0.0.0.0")
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            for (intf in interfaces) {
+                if (intf.isUp) {
+                    for (addr in intf.inetAddresses) {
+                        if (addr is Inet4Address) {
+                            ips.add(addr.hostAddress)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return ips
+    }
+
+    /**
+     * Returns a list of all broadcast addresses for active, non-loopback interfaces.
+     */
+    fun getBroadcastAddresses(): List<InetAddress> {
+        val broadcastList = mutableListOf<InetAddress>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (networkInterface.isLoopback || !networkInterface.isUp) continue
+                
+                for (interfaceAddress in networkInterface.interfaceAddresses) {
+                    val broadcast = interfaceAddress.broadcast
+                    if (broadcast != null) {
+                        broadcastList.add(broadcast)
+                    }
+                }
+            }
+            // Always include global broadcast as fallback
+            broadcastList.add(InetAddress.getByName("255.255.255.255"))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return broadcastList.distinct()
     }
 
     /**

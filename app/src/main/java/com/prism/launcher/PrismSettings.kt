@@ -314,11 +314,28 @@ object PrismSettings {
     fun getP2pSelfId(ctx: Context): String {
         val id = prefs(ctx).getString(KEY_P2P_SELF_ID, "") ?: ""
         if (id.isEmpty()) {
-            val gen = java.util.UUID.randomUUID().toString().substring(0, 8)
-            prefs(ctx).edit().putString(KEY_P2P_SELF_ID, gen).apply()
-            return gen
+            // Default to sanitized device model (e.g. "SM-S901U")
+            val model = android.os.Build.MODEL.replace(" ", "-")
+            prefs(ctx).edit().putString(KEY_P2P_SELF_ID, model).apply()
+            return model
         }
         return id
+    }
+
+    fun getActiveServer(ctx: Context): PrismServer? {
+        return getPrismServers(ctx).find { it.isActive }
+    }
+
+    /** Returns all known static mesh node addresses (Bootstrap + Fleet Servers) */
+    fun getAllMeshNodes(ctx: Context): List<String> {
+        val nodes = mutableSetOf<String>()
+        val bootstrap = getMeshBootstrapAddress(ctx)
+        if (bootstrap.isNotEmpty()) nodes.add(bootstrap)
+        
+        getPrismServers(ctx).forEach { 
+            if (it.address.isNotEmpty()) nodes.add(it.address)
+        }
+        return nodes.toList()
     }
 
     // ── P2P Web Hosting ─────────────────────────────────────────────────────

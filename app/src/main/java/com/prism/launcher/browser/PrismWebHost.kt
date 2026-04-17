@@ -1,6 +1,9 @@
 package com.prism.launcher.browser
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
@@ -17,6 +20,7 @@ import java.util.Locale
 import java.util.TimeZone
 import androidx.documentfile.provider.DocumentFile
 import com.prism.launcher.messaging.AiManager
+import java.io.ByteArrayOutputStream
 
 /**
  * Handle serving local web content over the Prism Mesh.
@@ -25,14 +29,18 @@ import com.prism.launcher.messaging.AiManager
 object PrismWebHost {
 
     private const val TAG = "PrismWebHost"
+    
+    // Structure: domain -> (path -> File or DocumentFile)
+    private val siteCache = mutableMapOf<String, MutableMap<String, Any>>()
+    private val cacheMutex = Any()
 
     suspend fun serve(context: Context, socket: Socket, domain: String, preReadHeader: String? = null) = withContext(Dispatchers.IO) {
         val input = socket.getInputStream()
         val output = socket.getOutputStream()
 
         try {
-            // Find matching site
-            val sites = PrismSettings.getP2pHostedSites(context)
+            // 1. Normal site lookup - Mapping all hosted websites to port 8080
+            val sites = com.prism.launcher.PrismSettings.getP2pHostedSites(context)
             val site = sites.find { it.domain.equals(domain, ignoreCase = true) && it.isActive }
             
             if (site == null) {
@@ -57,7 +65,6 @@ object PrismWebHost {
                 return@withContext
             }
 
-            // Sanitize and resolve path
             if (path.contains("..")) {
                 sendError(output, 403, "Forbidden")
                 return@withContext
@@ -65,31 +72,28 @@ object PrismWebHost {
 
             if (path == "/") path = "/index.html"
             
-            // Resolve local file using URI permissions or raw path
+            // 2. Cache Check: Fast-path for repeated requests (icons, CSS, etc)
+            val domainCache = synchronized(cacheMutex) {
+                siteCache.getOrPut(domain) { mutableMapOf() }
+            }
+            
+            val cachedResult = domainCache[path]
+            if (cachedResult != null) {
+                handleFileResult(context, output, cachedResult, path)
+                return@withContext
+            }
+            
             val rootUri = Uri.parse(site.localPath)
-            
-            // In a production environment with ACTION_OPEN_DOCUMENT_TREE, 
-            // we'd use DocumentFile.fromTreeUri. But since we have MANAGE_EXTERNAL_STORAGE,
-            // we'll try to resolve the actual path.
-            
             val fileResult = resolveFile(context, rootUri, path)
             
-            if (fileResult == null) {
-                sendError(output, 404, "File Not Found: $path")
-            } else if (fileResult is File) {
-                if (fileResult.name.endsWith(".prism")) {
-                    sendAiTemplate(context, output, fileResult)
-                } else {
-                    sendFile(output, fileResult)
-                }
-            } else if (fileResult is DocumentFile) {
-                if (fileResult.name?.endsWith(".prism") == true) {
-                    sendAiTemplate(context, output, fileResult)
-                } else {
-                    sendDocumentFile(context, output, fileResult)
-                }
+            if (fileResult != null) {
+                synchronized(cacheMutex) { domainCache[path] = fileResult }
+                handleFileResult(context, output, fileResult, path)
+            } else {
+                // Negative cache to prevent repeated scanning of missing files
+                synchronized(cacheMutex) { domainCache[path] = "NULL_MARKER" }
+                handleMissingFile(context, output, path)
             }
-
         } catch (e: Exception) {
             com.prism.launcher.PrismLogger.logError(TAG, "Serving error for $domain", e)
         } finally {
@@ -97,10 +101,53 @@ object PrismWebHost {
         }
     }
 
+    private suspend fun handleFileResult(context: Context, output: OutputStream, result: Any, path: String) {
+        when {
+            result is File -> {
+                if (result.name.endsWith(".prism")) {
+                    sendAiTemplate(context, output, result)
+                } else {
+                    sendFile(output, result)
+                }
+            }
+            result is DocumentFile -> {
+                if (result.name?.endsWith(".prism") == true) {
+                    sendAiTemplate(context, output, result)
+                } else {
+                    sendDocumentFile(context, output, result)
+                }
+            }
+            result == "NULL_MARKER" -> {
+                handleMissingFile(context, output, path)
+            }
+        }
+    }
+
+    private fun handleMissingFile(context: Context, output: OutputStream, path: String) {
+        val isImage = path.endsWith(".png", true) || path.endsWith(".jpg", true) || 
+                      path.endsWith(".jpeg", true) || path.endsWith(".gif", true) || 
+                      path.endsWith(".ico", true) || path.endsWith(".svg", true) || 
+                      path.endsWith(".webp", true)
+        
+        if (isImage) {
+            sendAppIcon(context, output)
+        } else {
+            sendError(output, 404, "File Not Found: $path")
+        }
+    }
+    
+    /**
+     * Clear the cache for a specific site (e.g. if the user updates the source folder)
+     */
+    fun clearCache(domain: String) {
+        synchronized(cacheMutex) {
+            siteCache.remove(domain)
+        }
+    }
+
     private fun resolveFile(context: Context, rootUri: Uri, reqPath: String): Any? {
         val cleanPath = reqPath.removePrefix("/")
         
-        // Strategy A: Direct File access (Fastest, works with MANAGE_EXTERNAL_STORAGE)
         var baseDir = rootUri.path ?: ""
         if (baseDir.startsWith("/tree/primary:")) {
             baseDir = baseDir.replace("/tree/primary:", "/storage/emulated/0/")
@@ -109,9 +156,10 @@ object PrismWebHost {
         }
         
         val file = File(baseDir, cleanPath)
-        if (file.exists() && !file.isDirectory) return file
+        if (file.exists() && !file.isDirectory) {
+            return file
+        }
         
-        // Strategy B: SAF Navigation (Fallback for non-primary storage)
         try {
             val rootDoc = DocumentFile.fromTreeUri(context, rootUri)
             if (rootDoc != null && rootDoc.exists()) {
@@ -121,13 +169,57 @@ object PrismWebHost {
                     if (seg.isEmpty()) continue
                     current = current?.findFile(seg)
                 }
-                if (current != null && current.isFile) return current
+                if (current != null && current.isFile) {
+                    return current
+                }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "SAF Resolution failed for $reqPath", e)
-        }
+        } catch (e: Exception) {}
         
         return null
+    }
+
+    fun getAppIconBytes(context: Context): ByteArray? {
+        try {
+            val icon = context.packageManager.getApplicationIcon(context.packageName)
+            val bitmap = if (icon is BitmapDrawable) {
+                icon.bitmap
+            } else {
+                val b = Bitmap.createBitmap(icon.intrinsicWidth, icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(b)
+                icon.setBounds(0, 0, canvas.width, canvas.height)
+                icon.draw(canvas)
+                b
+            }
+            
+            val stream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            return stream.toByteArray()
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    private fun sendAppIcon(context: Context, output: OutputStream) {
+        val bytes = getAppIconBytes(context)
+        if (bytes == null) {
+            sendError(output, 404, "Icon Not Found")
+            return
+        }
+        
+        try {
+            val response = StringBuilder()
+            response.append("HTTP/1.1 200 OK\r\n")
+            response.append("Content-Type: image/png\r\n")
+            response.append("Content-Length: ${bytes.size}\r\n")
+            response.append("Date: ${getServerTime()}\r\n")
+            response.append("Server: PrismMesh/1.0\r\n")
+            response.append("Connection: close\r\n")
+            response.append("\r\n")
+
+            output.write(response.toString().toByteArray())
+            output.write(bytes)
+            output.flush()
+        } catch (e: Exception) {}
     }
 
     private suspend fun sendAiTemplate(context: Context, output: OutputStream, source: Any) {
@@ -137,16 +229,11 @@ object PrismWebHost {
             else -> ""
         }
         
-        Log.d(TAG, "Processing AI Template: $prompt")
-        
-        // Wrap prompt with context to ensure it returns HTML
         val systemContext = "Output ONLY valid HTML. Do not include markdown code blocks like ```html. Just the raw HTML code."
         val finalPrompt = "$systemContext\n\nUser Content Request:\n$prompt"
         
         val (htmlContent, _) = AiManager.getResponse(context, finalPrompt)
-        com.prism.launcher.PrismLogger.logInfo(TAG, "AI Content Generated for $source")
         
-        // Clean up any potential markdown garbage if AI insisted on it
         val cleanedHtml = htmlContent.trim()
             .removePrefix("```html")
             .removeSuffix("```")
@@ -215,8 +302,24 @@ object PrismWebHost {
     }
 
     private fun sendError(output: OutputStream, code: Int, message: String) {
-        val response = "HTTP/1.1 $code $message\r\nContent-Type: text/plain\r\n\r\n$message"
-        output.write(response.toByteArray())
+        val statusText = when (code) {
+            404 -> "Not Found"
+            403 -> "Forbidden"
+            405 -> "Method Not Allowed"
+            else -> "Internal Server Error"
+        }
+        
+        val body = "HTTP Error $code: $message"
+        val response = StringBuilder()
+        response.append("HTTP/1.1 $code $statusText\r\n")
+        response.append("Content-Type: text/plain\r\n")
+        response.append("Content-Length: ${body.toByteArray().size}\r\n")
+        response.append("Connection: close\r\n")
+        response.append("Date: ${getServerTime()}\r\n")
+        response.append("\r\n")
+        response.append(body)
+        
+        output.write(response.toString().toByteArray())
         output.flush()
     }
 

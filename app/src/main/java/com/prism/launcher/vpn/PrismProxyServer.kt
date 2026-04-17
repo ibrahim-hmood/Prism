@@ -60,17 +60,26 @@ class PrismProxyServer(
                             }
                         }
                         
+                        // --- VPN PROTECTION ---
+                        // We must "protect" the server socket so it can receive connections 
+                        // from the mesh. However, if it's the Hosting listener, we only protect 
+                        // if we want it strictly off-tunnel.
+                        if (isProxyMode) {
+                            com.prism.launcher.browser.PrivateDnsVpnService.protectSocket(channel.socket())
+                        }
+                        
                         // PORT PROTECTION: Only the general VPN Proxy should "jump" ports.
                         // The Hosting listener MUST stay on its assigned port (8080) to be reachable.
                         if (isProxyMode && (port == 8080 || port == 8081)) {
                             port = MeshUtils.findAvailablePort()
                         }
                         
-                        channel.socket().bind(InetSocketAddress(port))
+                        channel.socket().bind(InetSocketAddress("0.0.0.0", port))
                         serverChannel = channel
                         
                         val roleName = if (isProxyMode) "VPN Proxy Engine" else "Mesh Hosting Listener"
-                        com.prism.launcher.PrismLogger.logSuccess(serverName, "$roleName online on port $port")
+                        val localAddr = channel.socket().localSocketAddress
+                        com.prism.launcher.PrismLogger.logSuccess(serverName, "$roleName online at $localAddr ($port)")
                         break 
                     } catch (e: Exception) {
                         runCatching { channel?.close() }
@@ -91,7 +100,8 @@ class PrismProxyServer(
                         val client = channel.socket().accept() ?: break
                         launch { handleClient(client) }
                     } catch (e: Exception) {
-                        if (isActive) delay(100)
+                        PrismLogger.logError(serverName, "Accept loop error on port $port", e)
+                        if (isActive) delay(500) // Back off slightly on repeated errors
                     }
                 }
             }
@@ -136,8 +146,8 @@ class PrismProxyServer(
                         // 0x16 is the TLS Handshake record type
                         if (buffer[0] == 0x16.toByte() || buffer[0] == 0x16.toLong().toByte()) {
                             try {
-                                PrismLogger.logInfo(serverName, "Upgrading Mesh connection for $domain to SSL/TLS")
-                                val sslContext = PrismSslManager.getSslContext(PrismApp.instance)
+                                PrismLogger.logInfo(serverName, "Upgrading Mesh connection for $domain to dynamic SSL/TLS")
+                                val sslContext = PrismSslManager.getSslContextForDomain(PrismApp.instance, domain)
                                 
                                 val peekingSocket = object : java.net.Socket() {
                                     override fun getInputStream(): java.io.InputStream = bis
@@ -219,7 +229,9 @@ class PrismProxyServer(
             
             // --- Local Loop Fix ---
             val myMeshIp = com.prism.launcher.MeshUtils.getLocalMeshIp(com.prism.launcher.PrismApp.instance)
-            if (isP2p && targetHost == myMeshIp) {
+            val isLocal = targetHost == "127.0.0.1" || targetHost == "localhost" || targetHost == myMeshIp || targetHost == "::1"
+            
+            if (isP2p && isLocal) {
                 com.prism.launcher.PrismLogger.logInfo("PrismProxy", "Domestic Mesh Request: Serving $host directly from local host.")
                 PrismWebHost.serve(com.prism.launcher.PrismApp.instance, clientSocket, host)
                 return@withContext
@@ -244,7 +256,7 @@ class PrismProxyServer(
             
             joinAll(job1, job2)
         } catch (e: Exception) {
-            e.printStackTrace()
+            PrismLogger.logError("PrismProxy", "Failed to bridge to $host:$targetPort", e)
         } finally {
             runCatching { clientSocket.close() }
             runCatching { targetSocket?.close() }

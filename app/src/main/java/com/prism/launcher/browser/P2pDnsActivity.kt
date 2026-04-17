@@ -21,12 +21,18 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import kotlin.concurrent.thread
+import kotlinx.coroutines.*
 
 class P2pDnsActivity : PrismBaseActivity() {
 
     private lateinit var binding: ActivityP2pDnsBinding
-    private var isRemoteMode = false
-    private var activeServer: PrismSettings.PrismServer? = null
+    private val activityScope = CoroutineScope(Dispatchers.Main + Job())
+
+    private val activeServer: PrismSettings.PrismServer?
+        get() = PrismSettings.getActiveServer(this)
+
+    private val isRemoteMode: Boolean
+        get() = activeServer != null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,44 +43,52 @@ class P2pDnsActivity : PrismBaseActivity() {
         binding.dnsToolbar.setNavigationOnClickListener { finish() }
 
         binding.dnsList.layoutManager = LinearLayoutManager(this)
-        refreshList()
-
-        binding.addDnsBtn.setOnClickListener { showAddDialog() }
-        binding.switchTargetBtn.setOnClickListener { toggleTarget() }
-    }
-
-    private fun refreshList() {
-        val records = if (isRemoteMode) {
-            // In a real implementation, we'd fetch these from the server.
-            // For now, we show a 'Syncing...' state or the local cache of peer records.
-            P2pDnsManager.getRecords() 
-        } else {
-            P2pDnsManager.getRecords()
+        
+        // Observe DNS Records Flow
+        activityScope.launch {
+            P2pDnsManager.records.collect { records ->
+                refreshList(records)
+            }
         }
 
+        // Periodic Mesh Status Update
+        activityScope.launch {
+            while (isActive) {
+                updateMeshStatus()
+                delay(5000)
+            }
+        }
+
+        binding.addDnsBtn.setOnClickListener { showAddDialog() }
+        
+        // Use the old switch button as a manual Resync trigger
+        binding.switchTargetBtn.text = "Resync Mesh"
+        binding.switchTargetBtn.setOnClickListener { 
+            val best = com.prism.launcher.mesh.PrismMeshService.getBestNode()
+            if (best != null) {
+                com.prism.launcher.mesh.PrismMeshService.requestSync(best)
+                Toast.makeText(this, "Sync request sent to $best", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "No active peers found for sync", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        activityScope.cancel()
+    }
+
+    private fun updateMeshStatus() {
+        val count = com.prism.launcher.mesh.PrismMeshService.getPeerCount()
+        val bestNode = com.prism.launcher.mesh.PrismMeshService.getBestNode() ?: "None"
+        binding.targetText.text = "Mesh: $count Peers Online (Best: $bestNode)"
+    }
+
+    private fun refreshList(records: Map<String, P2pDnsManager.DnsRecord> = P2pDnsManager.getRecords()) {
         binding.dnsList.adapter = DnsAdapter(records.toList()) { domain ->
             confirmDelete(domain)
         }
-    }
-
-    private fun toggleTarget() {
-        if (!isRemoteMode) {
-            val servers = PrismSettings.getPrismServers(this)
-            if (servers.isEmpty()) {
-                Toast.makeText(this, "No Prism Servers configured in settings", Toast.LENGTH_SHORT).show()
-                return
-            }
-            activeServer = servers.find { it.isActive } ?: servers.first()
-            isRemoteMode = true
-            binding.targetText.text = "Target: ${activeServer?.name?.uppercase()}"
-            binding.switchTargetBtn.text = "Switch to Local"
-        } else {
-            isRemoteMode = false
-            activeServer = null
-            binding.targetText.text = "Target: Local Device"
-            binding.switchTargetBtn.text = "Connect to Server"
-        }
-        refreshList()
     }
 
     private fun showAddDialog() {
@@ -108,34 +122,24 @@ class P2pDnsActivity : PrismBaseActivity() {
 
     private fun sendRemoteCommand(action: String, domain: String, ip: String?) {
         val server = activeServer ?: return
-        thread {
-            try {
-                val socket = DatagramSocket()
-                val payload = JSONObject().apply {
-                    put("action", action)
-                    put("domain", domain)
-                    if (ip != null) put("ip", ip)
-                }.toString().toByteArray()
-                
-                val packetData = ByteArray(6 + payload.size)
-                "PRISM".toByteArray().copyInto(packetData)
-                packetData[5] = 0x05 // DNS_WRITE_CMD
-                payload.copyInto(packetData, 6)
-
-                val packet = DatagramPacket(packetData, packetData.size, InetAddress.getByName(server.address), server.port)
-                socket.send(packet)
-                socket.close()
-                
-                runOnUiThread {
-                    Toast.makeText(this, "Remote $action command sent to ${server.name}", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    Toast.makeText(this, "Failed to reach server: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
+        if (action == "ADD" && ip != null) {
+            // New Robust Sync: Update locally and broadcast specifically to the "Master" node
+            P2pDnsManager.updateRecord(this, domain, ip)
+            com.prism.launcher.mesh.PrismMeshService.sendPacket(server.address, server.port, 0x05.toByte(), JSONObject().apply {
+                put("domain", domain)
+                put("ip", ip)
+            }.toString())
+            Toast.makeText(this, "Propagated to node: ${server.name} (${server.address})", Toast.LENGTH_SHORT).show()
+        } else {
+            val payload = JSONObject().apply {
+                put("action", action)
+                put("domain", domain)
+                if (ip != null) put("ip", ip)
+            }.toString()
+            com.prism.launcher.mesh.PrismMeshService.sendPacket(server.address, server.port, 0x05.toByte(), payload)
         }
     }
+
 
     private inner class DnsAdapter(val items: List<Pair<String, P2pDnsManager.DnsRecord>>, val onDelete: (String) -> Unit) : RecyclerView.Adapter<DnsVH>() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DnsVH {

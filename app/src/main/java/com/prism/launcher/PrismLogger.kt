@@ -44,10 +44,13 @@ object PrismLogger {
         
         logFile = File(prismDir, "diagnostics.log")
         
-        // Intercept Crashes
+        // Intercept Crashes globally
         val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            logError("CRASH", "Uncaught exception in thread ${thread.name}", throwable)
+            val threadInfo = "Name: ${thread.name}, ID: ${thread.id}"
+            logError("CRASH", "Uncaught exception in thread [$threadInfo]", throwable)
+            // Still write to standard Logcat for system collectors
+            Log.e(TAG, "FATAL EXCEPTION in thread [$threadInfo]", throwable)
             oldHandler?.uncaughtException(thread, throwable)
         }
         

@@ -9,6 +9,7 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import android.util.Base64
 import com.prism.launcher.PrismLogger
+import java.security.SecureRandom
 
 /**
  * Handles the decentralized SSL/TLS layer for the Prism Mesh.
@@ -16,66 +17,48 @@ import com.prism.launcher.PrismLogger
  * P2P transport is plain text.
  */
 object PrismSslManager {
-
     private const val PASSWORD = "prism_mesh_encryption"
-    
-    // A pre-generated self-signed PKCS12 keystore (Base64)
-    // Alias: prism, CN=PrismMesh, Validity: 100y
-    private const val B64_P12 = 
-        "MIIJuQIBAzCCCVEGCSqGSIb3DQEHAaCCCUQEgglAMIIJPDCCBg0GCSqGSIb3DQEHBqCCBf4w" +
-        "ggX6AgEAMIIF9QYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQYwDgQIJWbOfZ8/zPMCAggAgIIF" +
-        "yI9HkXnO+vM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/zPM8vzP8/z" +
-        "PM8vG1lZA6pX0L7qN1mR6L0u9P8Z3C/D+P4/j+P4/j+P4/jP4/j+P4/j+P4/j+P4/j+P4/j" +
-        "P4/j+P4/j+P4/j+P4/j+P4/j+P4/j+P4/j+P4/jP4/j+P4/j+P4/jP4/j+P4/j+P4/j+P4" +
-        "jP4/j+P4/j+P4/jP4/j+P4/j+P4/j+P4/j+P4/jP4/j+P4/j+P4/jP4/j+P4/j+P4/j+P4" +
-        "jP4/j+P4/j+P4/jP4/j+P4/j+P4vj+P4/j+P4vz+"
+    private val contextMap = mutableMapOf<String, SSLContext>()
+    private val lock = Any()
 
-    private var cachedContext: SSLContext? = null
-
-    fun getSslContext(context: Context): SSLContext {
-        cachedContext?.let { return it }
-        
-        try {
-            val ksFile = java.io.File(context.filesDir, "mesh_identity.p12")
-            val ks = KeyStore.getInstance("PKCS12")
+    /**
+     * Generates a unique SSLContext for a specific domain using a dynamically generated certificate.
+     */
+    fun getSslContextForDomain(context: Context, domain: String): SSLContext {
+        synchronized(lock) {
+            contextMap[domain]?.let { return it }
             
-            if (ksFile.exists()) {
-                ks.load(ksFile.inputStream(), PASSWORD.toCharArray())
-            } else {
+            PrismCertificateManager.init(context)
+            val leaf = PrismCertificateManager.generateLeafCertificate(domain) ?: return SSLContext.getDefault()
+
+            try {
+                // We create an in-memory KeyStore for this specific session
+                val ks = KeyStore.getInstance("PKCS12")
                 ks.load(null, null)
-                val bytes = Base64.decode(B64_P12, Base64.DEFAULT)
-                if (bytes != null && bytes.isNotEmpty()) {
-                    ks.load(ByteArrayInputStream(bytes), PASSWORD.toCharArray())
-                }
+                
+                val chain = arrayOf(leaf.certificate, leaf.issuer)
+                ks.setKeyEntry("prism_leaf", leaf.keyPair.private, PASSWORD.toCharArray(), chain)
+
+                val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+                kmf.init(ks, PASSWORD.toCharArray())
+
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(kmf.keyManagers, arrayOf(PrismTrustManager), SecureRandom())
+                
+                contextMap[domain] = sslContext
+                return sslContext
+            } catch (e: Exception) {
+                PrismLogger.logError("PrismSslManager", "Failed to create SSLContext for $domain", e)
+                return SSLContext.getDefault()
             }
-            
-            val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-            kmf.init(ks, PASSWORD.toCharArray())
-            
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(kmf.keyManagers, arrayOf(PrismTrustManager), null)
-            
-            cachedContext = sslContext
-            return sslContext
-        } catch (e: Exception) {
-            PrismLogger.logError("PrismSslManager", "Failed to load mesh identity. P2P Hosting may fail.", e)
-            return SSLContext.getDefault()
-        } catch (r: RuntimeException) {
-            PrismLogger.logError("PrismSslManager", "Runtime failure during SSL init. Recovering...", r)
-            return SSLContext.getDefault()
         }
+    }
+
+    /**
+     * Legacy/Generic context for the proxy listener.
+     */
+    fun getSslContext(context: Context): SSLContext {
+        return getSslContextForDomain(context, "localhost")
     }
 
     object PrismTrustManager : X509TrustManager {

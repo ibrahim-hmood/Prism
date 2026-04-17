@@ -40,6 +40,11 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
 dependencies {
@@ -69,8 +74,8 @@ dependencies {
 
 
     // MediaPipe Vision & GenAI — for Local LLM and Diffusion
-    implementation("com.google.mediapipe:tasks-genai:0.10.14")
-    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.14")
+    implementation("com.google.mediapipe:tasks-genai:0.10.33")
+    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.20")
 
     // WireGuard Tunnel JNI wrapper
     implementation("com.wireguard.android:tunnel:1.0.20260102")
@@ -78,5 +83,9 @@ dependencies {
 
     // OkHttp for mesh proxying
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // BouncyCastle for on-device SSL certificate generation (.p2p domains)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
 }
 

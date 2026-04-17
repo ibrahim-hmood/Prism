@@ -8,6 +8,7 @@ import com.prism.launcher.browser.PrivateDnsVpnService
 import com.prism.launcher.MeshUtils
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketAddress
@@ -28,7 +29,7 @@ class PrismSocket : Socket() {
     }
 
     override fun connect(endpoint: SocketAddress?) {
-        connect(endpoint, 0)
+        connect(endpoint, 8000)
     }
 
     override fun connect(endpoint: SocketAddress?, timeout: Int) {
@@ -37,26 +38,26 @@ class PrismSocket : Socket() {
             return
         }
 
-        val originalHost = endpoint.hostName ?: endpoint.address?.hostAddress ?: "unknown"
+        val ipAddr = endpoint.address?.hostAddress ?: ""
+        // Priority: 1. Explicit host hint, 2. Endpoint hostname, 3. IP
+        val originalHost = targetHost ?: if (!endpoint.hostName.isNullOrEmpty()) endpoint.hostName else ipAddr
         val originalPort = endpoint.port
         
-        // 1. Resolve domain for mesh status
-        val p2pIp = P2pDnsManager.resolve(originalHost)
-        val ipAddr = endpoint.address?.hostAddress ?: ""
+        // 1. Resolve domain for mesh status - STRICTLY check if it's a P2P record
+        val p2pIp = P2pDnsManager.resolve(originalHost, onlyP2p = true)
         
-        // Dynamic Mesh Detection:
-        // - In P2P DNS list
-        // - In VPN Subnet (10.8.0.x)
-        // - Already on mesh port (8080)
-        // - Matches peer naming convention (contains "-s-")
-        // - Domain ends in ".p2p"
-        val isMeshTarget = p2pIp != null || 
-                           ipAddr.startsWith("10.8.0.") || 
-                           ipAddr.startsWith("192.0.2.") || 
-                           originalPort == 8080 || 
-                           originalHost.contains("-s-") || 
-                           originalHost.endsWith(".p2p")
+        // Strict Mesh Detection:
+        // - Host ends with .p2p
+        // - In P2P DNS list (verified P2P source)
+        // - Host contains mesh signature "-s-"
+        // - Target is explicitly port 8080
+        val isMeshTarget = originalHost.endsWith(".p2p", ignoreCase = true) || 
+                           p2pIp != null || 
+                           originalHost.contains("-s-") ||
+                           originalPort == 8080 ||
+                           com.prism.launcher.mesh.PrismMeshService.isPeer(ipAddr)
         
+        // If not a mesh target, bypass P2P logic and connect normally
         if (!isMeshTarget) {
             super.connect(endpoint, timeout)
             return
@@ -65,21 +66,29 @@ class PrismSocket : Socket() {
         // 2. Perform Redirection & Handshake
         try {
             val meshIp = p2pIp ?: ipAddr
-            val finalHost = if (meshIp.startsWith("10.8.0.")) meshIp else originalHost
             val finalPort = 8080
             
-            PrismLogger.logInfo("PrismSocket", "Mesh Redirection: $originalHost:$originalPort -> $finalHost:$finalPort")
+            PrismLogger.logInfo("PrismSocket", "Mesh Redirection: $originalHost:$originalPort -> $meshIp:$finalPort")
             
-            // Handle local loop: if target is self, connect to local IP (Reliable loopback)
-            // 192.0.2.1 is treated as the synthetic local loopback for Mesh identities
-            val localIp = MeshUtils.getLocalMeshIp(PrismApp.instance)
-            val isLocal = meshIp == localIp || meshIp == "192.0.2.1" || meshIp == "127.0.0.1"
-            val connectAddr = if (isLocal) localIp else meshIp
+            // Handle local loop: if target is self, connect to 127.0.0.1
+            val localIps = MeshUtils.getAllLocalIps()
+            val isLocal = localIps.contains(meshIp) || meshIp == "127.0.0.1" || meshIp == "localhost"
+            val connectAddr = if (isLocal) "127.0.0.1" else meshIp
 
-            PrismLogger.logInfo("PrismSocket", "Redirection: $originalHost -> $connectAddr:$finalPort (Local: $isLocal)")
-            super.connect(InetSocketAddress(connectAddr, finalPort), timeout)
+            PrismLogger.logInfo("PrismSocket", "Connecting to $originalHost via $connectAddr:$finalPort (Local: $isLocal)")
             
-            // 3. Perform Handshake
+            // Protect the socket so it bypasses the VPN tunnel to reach the physical network.
+            // IMPORTANT: Never protect a local loopback connection (127.0.0.1), as it 
+            // will cause the OS to refuse the connection (ECONNREFUSED).
+            if (!isLocal) {
+                PrivateDnsVpnService.protectSocket(this)
+            }
+            
+            // Use InetAddress directly to avoid re-resolving
+            val targetAddress = InetAddress.getByName(connectAddr)
+            super.connect(InetSocketAddress(targetAddress, finalPort), timeout)
+            
+            // 3. Perform Handshake (Send the domain name)
             performHandshake(originalHost)
             
             PrismLogger.logSuccess("PrismSocket", "Handshake successful for $originalHost")
@@ -93,6 +102,9 @@ class PrismSocket : Socket() {
     private fun performHandshake(hostName: String) {
         val out = getOutputStream()
         val inp = getInputStream()
+        
+        // Set a timeout for the handshake phase specifically
+        soTimeout = 5000
         
         val handshake = "PRISM_CONNECT $hostName\n"
         out.write(handshake.toByteArray())
@@ -110,23 +122,4 @@ class PrismSocket : Socket() {
             throw java.io.IOException("Handshake mismatch: Expected PRISM_ACK, got '$ack'")
         }
     }
-}
-
-/**
- * SocketFactory that provides mesh-aware PrismSocket instances for internal engines.
- */
-class PrismSocketFactory : javax.net.SocketFactory() {
-    override fun createSocket(): Socket = PrismSocket()
-
-    override fun createSocket(host: String?, port: Int): Socket =
-        PrismSocket().apply { connect(java.net.InetSocketAddress(host, port)) }
-
-    override fun createSocket(host: String?, port: Int, localHost: java.net.InetAddress?, localPort: Int): Socket =
-        PrismSocket().apply { connect(java.net.InetSocketAddress(host, port)) }
-
-    override fun createSocket(host: java.net.InetAddress?, port: Int): Socket =
-        PrismSocket().apply { connect(java.net.InetSocketAddress(host, port)) }
-
-    override fun createSocket(address: java.net.InetAddress?, port: Int, localAddress: java.net.InetAddress?, localPort: Int): Socket =
-        PrismSocket().apply { connect(java.net.InetSocketAddress(address, port)) }
 }

@@ -13,6 +13,8 @@ import android.os.Build
 /**
  * Intelligent VPN Multiplexer that sniffs UDP traffic and routes to 
  * IKEv2, L2TP, or Legacy IPsec engines automatically.
+ * 
+ * Note: Discovery/Signaling has been moved to PrismMeshService to avoid port conflicts.
  */
 class VpnMultiplexer(
     private val context: android.content.Context,
@@ -27,11 +29,11 @@ class VpnMultiplexer(
     // Pass full credentials to engines
     private val ikeEngine = IkeEngine(psk, user, pass)
     private val l2tpEngine = L2tpEngine(psk, user, pass)
-    private val discoveryEngine = DiscoveryEngine(context, psk)
     val wgServerEngine = WireguardServerEngine(context)
 
     fun start() {
-        val portsToTry = listOf(port, 500, 4500, 1701, 51820, 8081).distinct()
+        // Only bind to standard VPN ports. Port 8081 is reserved for PrismMeshService.
+        val portsToTry = listOf(500, 4500, 1701, 51820).distinct()
         
         for (p in portsToTry) {
             scope.launch {
@@ -60,12 +62,6 @@ class VpnMultiplexer(
                         val isNatT = p == 4500
                         val rawData = packet.data.copyOfRange(0, packet.length)
                         
-                        // Handle Discovery/Signaling (Magic: PRISM)
-                        if (rawData.size >= 5 && String(rawData.copyOfRange(0, 5)) == "PRISM") {
-                            discoveryEngine.handlePacket(rawData, packet.address, packet.port, socket)
-                            continue
-                        }
-
                         // Handle WireGuard (Standard port 51820)
                         if (p == 51820) {
                             wgServerEngine.handlePacket(rawData, packet.address, packet.port, socket)

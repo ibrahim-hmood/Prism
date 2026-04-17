@@ -2,6 +2,7 @@ package com.prism.launcher.vpn
 
 import android.content.Context
 import android.util.Log
+import com.prism.launcher.browser.PrivateDnsVpnService
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -73,7 +74,7 @@ class WireguardServerEngine(private val context: Context) {
         Log.v("PrismWG", "Decapsulated packet from $address (${payload.size} bytes)")
         
         // 2. Inject into PrivateDnsVpnService for DNS filtering and routing
-        (context as? com.prism.launcher.browser.PrivateDnsVpnService)?.injectPacket(payload)
+        PrivateDnsVpnService.injectPacket(payload)
     }
 
     fun encapsulateAndSend(packet: ByteArray, peerIp: String) {
@@ -97,7 +98,7 @@ class WireguardServerEngine(private val context: Context) {
                 socket.reuseAddress = true
                 socket.bind(java.net.InetSocketAddress(0))
                 
-                (context as? com.prism.launcher.browser.PrivateDnsVpnService)?.protect(socket)
+                PrivateDnsVpnService.protectSocket(socket)
                 socket.send(udpPacket)
                 socket.close()
             } catch (e: Exception) {

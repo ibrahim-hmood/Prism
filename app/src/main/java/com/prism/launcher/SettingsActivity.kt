@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.prism.launcher.messaging.ModelDiscoveryService
 import kotlinx.coroutines.withContext
+import android.provider.OpenableColumns
 
 class SettingsActivity : PrismBaseActivity() {
 
@@ -68,7 +69,7 @@ class SettingsActivity : PrismBaseActivity() {
 
     private val modelPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
-            val fileName = uri.lastPathSegment ?: "external_model.tflite"
+            val fileName = getFileNameFromUri(uri)
             copyUriToInternal(uri, fileName, isPickingImageModel)
         }
     }
@@ -147,6 +148,35 @@ class SettingsActivity : PrismBaseActivity() {
         adapter.setItems(buildItems())
     }
 
+    private fun getFileNameFromUri(uri: Uri): String {
+        var name = ""
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            name = cursor.getString(nameIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        
+        if (name.isEmpty()) {
+            name = uri.path?.substringAfterLast('/') ?: "external_model.task"
+        }
+        
+        // Safety: Ensure it doesn't have reserved characters and a sensible default extension
+        if (!name.contains(".") && !isPickingImageModel) {
+            name += ".task"
+        }
+        
+        return name
+    }
+
     private fun checkDownloadStatus(id: Long) {
         val q = DownloadManager.Query().setFilterById(id)
         val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
@@ -193,10 +223,10 @@ class SettingsActivity : PrismBaseActivity() {
         val progressDialog = PrismDialogFactory.show(
             this,
             "Ingesting Intelligence",
-            "Optimizing $fileName for Prism...",
-            positiveText = null, // Hide buttons during copy
+            "Synchronizing $fileName to local neural storage...",
+            positiveText = null, 
             negativeText = null,
-            showProgress = true
+            showProgress = false // Changed to false because we use input.copyTo now which doesn't give mid-progress callback easily here
         )
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -204,22 +234,11 @@ class SettingsActivity : PrismBaseActivity() {
                 val fileSize = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
                 
                 contentResolver.openInputStream(uri)?.use { input ->
-                    java.io.FileOutputStream(targetFile).use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var bytesRead: Int
-                        var currentProgress = 0L
-                        
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            currentProgress += bytesRead
-                            
-                            if (fileSize > 0) {
-                                val percentage = (currentProgress * 100 / fileSize).toInt()
-                                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                                    PrismDialogFactory.updateProgress(progressDialog, percentage)
-                                }
-                            }
-                        }
+                    java.io.FileOutputStream(targetFile).use { fos ->
+                        val output = java.io.BufferedOutputStream(fos)
+                        input.copyTo(output)
+                        output.flush()
+                        fos.getFD().sync() // Force physical write to disk
                     }
                 }
                 
@@ -592,6 +611,19 @@ class SettingsActivity : PrismBaseActivity() {
                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Prism WireGuard", config))
                     
                     PrismDialogFactory.show(this, "Config Copied", "Paste this into a new tunnel in your Windows WireGuard app. \n\nNOTE: Replace 'CLIENT_PRIVATE_KEY_HERE' in the config with your own generated key.")
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
+            ),
+            SettingItem.Nav(
+                "Establish Mesh Trust",
+                "Export Root CA to Downloads to enable HTTPS 'Secure' lock",
+                {
+                    val path = com.prism.launcher.vpn.PrismCertificateManager.exportRootCA(this)
+                    if (path != null) {
+                        PrismDialogFactory.show(this, "Root CA Exported", "The certificate has been saved to your Downloads folder ($path).\n\nTo see secure green locks, go to Android Settings -> Security -> Install from Storage -> CA Certificate and select this file.")
+                    } else {
+                        Toast.makeText(this, "Failed to export Root CA", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 isEnabled = PrismSettings.getVpnTunnelingEnabled(this)
             ),
