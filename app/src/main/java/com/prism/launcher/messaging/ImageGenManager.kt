@@ -23,11 +23,9 @@ object ImageGenManager {
         val mode = PrismSettings.getAiMode(context)
         
         return@withContext if (mode == PrismSettings.AI_MODE_CLOUD) {
-            val apiKey = PrismSettings.getCloudAiKey(context)
-            val baseUrl = PrismSettings.getCloudAiBaseUrl(context)
-            if (apiKey.isBlank()) return@withContext null
-            
-            val bitmap = CloudAiService.fetchImage(baseUrl, apiKey, prompt)
+            val cloudModel = PrismSettings.getActiveCloudModel(context) ?: return@withContext null
+
+            val bitmap = CloudAiService.fetchImage(cloudModel.baseUrl, cloudModel.apiKey, prompt)
             bitmap?.let { saveToPublicStore(context, it) }
         } else {
             val modelPath = PrismSettings.getLocalImageModelPath(context)

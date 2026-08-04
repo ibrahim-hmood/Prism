@@ -157,9 +157,9 @@ class DomainAdapter(
         holder.binding.removeDomainBtn.setOnClickListener { onRemove(domain) }
         
         if (isCustom) {
-            holder.binding.domainText.setTextColor(android.graphics.Color.WHITE)
+            holder.binding.domainText.setTextColor(androidx.core.content.ContextCompat.getColor(holder.binding.domainText.context, R.color.prism_text_primary))
         } else {
-            holder.binding.domainText.setTextColor(0xB3FFFFFF.toInt()) // muted
+            holder.binding.domainText.setTextColor(androidx.core.content.ContextCompat.getColor(holder.binding.domainText.context, R.color.prism_text_muted))
         }
     }
 

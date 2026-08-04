@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The unselected state of a thumb. Deliberately quiet: these buttons sit under every generated
+    image, so at rest they should read as available rather than as something demanding an answer.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/prismDivider" />
+    <corners android:radius="14dp" />
+</shape>

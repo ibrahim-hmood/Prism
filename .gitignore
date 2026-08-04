@@ -9,3 +9,21 @@ captures/
 *.apk
 *.ap_
 *.aab
+/prism-os/scripts/qemu-android-build/
+
+# Scratch output dir used for CLI verification builds when the IDE holds app/build locks
+build-verify/
+
+# CMake/NDK build tree for the JNI sources. ~300 MB of regenerable object files.
+/app/.cxx/
+
+# QEMU binary produced by prism-os/scripts/build-qemu-android.sh (~112 MB).
+# A build output, not a source: rebuild it with that script rather than tracking it.
+# It is also over GitHub's 100 MB hard file-size limit, so committing it would make
+# the repository unpushable.
+/app/src/main/jniLibs/
+
+# QEMU build outputs and configure/build logs from build-qemu-android.sh.
+/prism-os/scripts/out/
+/prism-os/scripts/config-temp/
+/prism-os/scripts/*.log

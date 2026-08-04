@@ -32,7 +32,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:text="Name"
-            android:textColor="@color/social_text_main"
+            android:textColor="@color/social_card_text"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -43,19 +43,24 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:text="@handle"
-            android:textColor="#888888"
+            android:textColor="#8A8A8E"
             android:textSize="10sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/followBtn"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginTop="4dp"
-            android:padding="0dp"
+            android:layout_height="28dp"
+            android:layout_marginTop="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="14dp"
             android:text="Follow"
             android:textAllCaps="false"
-            android:textColor="@color/social_accent_green"
-            android:textSize="10sp" />
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            app:backgroundTint="@color/social_accent_green"
+            app:cornerRadius="14dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

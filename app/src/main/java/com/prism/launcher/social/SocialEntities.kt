@@ -36,6 +36,7 @@ data class SocialBotEntity(
     val bio: String,
     val avatarUrl: String?,
     val personaType: String, // e.g. "tech", "vibe", "news"
+    val personality: String = "", // Full voice/interests/quirks description — invented once at creation, used to steer every post/comment/DM/reply so this persona reads as a consistent individual instead of a generic assistant.
     val lastPostTime: Long = 0
 )
 
@@ -51,7 +52,11 @@ data class SocialMessageEntity(
 @Entity(tableName = "social_comments")
 data class SocialCommentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val commentId: String = java.util.UUID.randomUUID().toString(),
     val postId: String,
+    // Null for a top-level reply directly on the post; set to another comment's commentId when
+    // this is a reply to that comment (a reply to a reply, and so on, forming a tree).
+    val parentCommentId: String? = null,
     val authorId: String,
     val authorName: String,
     val authorHandle: String,
@@ -91,8 +96,11 @@ interface SocialDao {
     suspend fun getBot(id: String): SocialBotEntity?
 
     // Comments
-    @Query("SELECT * FROM social_comments WHERE postId = :postId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM social_comments WHERE postId = :postId AND parentCommentId IS NULL ORDER BY timestamp ASC")
     suspend fun getCommentsForPost(postId: String): List<SocialCommentEntity>
+
+    @Query("SELECT * FROM social_comments WHERE parentCommentId = :parentCommentId ORDER BY timestamp ASC")
+    suspend fun getReplies(parentCommentId: String): List<SocialCommentEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertComment(comment: SocialCommentEntity)

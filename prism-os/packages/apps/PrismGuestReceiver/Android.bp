@@ -1,0 +1,13 @@
+android_app {
+    name: "PrismGuestReceiver",
+    srcs: ["src/**/*.kt"],
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+    platform_apis: true,
+    privileged: true,
+    certificate: "platform",
+    sdk_version: "",
+    optimize: {
+        enabled: false,
+    },
+}

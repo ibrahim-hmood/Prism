@@ -4,11 +4,14 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.prism.launcher.databinding.ItemConversationBinding
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 data class ThreadInfo(
     val threadId: Long,
     val address: String,
-    val snippet: String
+    val snippet: String,
+    val timestamp: Long = 0L
 )
 
 class ConversationAdapter(
@@ -28,10 +31,14 @@ class ConversationAdapter(
         return VH(binding)
     }
 
+    private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
     override fun onBindViewHolder(holder: VH, position: Int) {
         val t = threads[position]
         holder.binding.conversationName.text = t.address
         holder.binding.conversationSnippet.text = t.snippet
+        holder.binding.conversationAvatarInitial.text = t.address.trim().firstOrNull()?.uppercase() ?: "?"
+        holder.binding.conversationTime.text = if (t.timestamp > 0) timeFormat.format(t.timestamp) else ""
         holder.itemView.setOnClickListener { onClick(t) }
     }
 

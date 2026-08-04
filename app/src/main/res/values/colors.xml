@@ -4,9 +4,11 @@
     <color name="prism_surface">#CC1A1A24</color>
     <color name="prism_accent">#FF7C9EFF</color>
     <color name="prism_glass">#99FFFFFF</color>
-    <color name="prism_text_primary">#FFF5F5F7</color>
-    <color name="prism_text_muted">#B3FFFFFF</color>
-    <color name="prism_text_secondary">#99FFFFFF</color>
+    <!-- Text colors below are theme-aware: this file is the light-mode value set,
+         overridden for dark mode in values-night/colors.xml -->
+    <color name="prism_text_primary">#FF1D1D1F</color>
+    <color name="prism_text_muted">#B31D1D1F</color>
+    <color name="prism_text_secondary">#991D1D1F</color>
     <color name="drawer_card_glass">#66FFFFFF</color>
     <color name="drawer_stroke">#55FFFFFF</color>
     <color name="prism_page_scrim">#AA0A0A0F</color>
@@ -17,10 +19,26 @@
     <!-- Nebula Social Redesign (Dark Mode Transition) -->
     <color name="social_bg_light">#FF0A0A0F</color>
     <color name="social_card_bg">#FF1A1A24</color>
-    <color name="social_text_main">#FFFFFFFF</color>
+    <color name="social_text_main">#FF1D1D1F</color>
+    <!-- Fixed white (not theme-aware): Nebula's post/comment/profile cards use a permanently
+         dark background (social_bg_light/social_card_bg) regardless of app theme, so their
+         text must stay white in both light and dark mode. -->
+    <color name="social_card_text">#FFFFFFFF</color>
     <color name="social_accent_green">#FF00BA7C</color>
+
+    <!-- Models page type tags -->
+    <color name="model_tag_text_bg">#2200BA7C</color>
+    <color name="model_tag_text_fg">#FF00BA7C</color>
+    <color name="model_tag_image_bg">#22FF4FA3</color>
+    <color name="model_tag_image_fg">#FFFF4FA3</color>
     
     <!-- P2P Health Check Refinement -->
     <color name="check_dns_blue">#FF00D5FF</color>
     <color name="check_no_dns_pink">#FFFF77EE</color>
+
+    <!-- iMessage-style chat bubbles (Messages page + Nebula DMs). Fixed brand blue, not the
+         user-customizable glow accent; overridden for dark mode in values-night/colors.xml. -->
+    <color name="imessage_blue">#FF007AFF</color>
+    <color name="imessage_bubble_received">#FFE9E9EB</color>
+    <color name="imessage_avatar_bg">#FF9B9BA1</color>
 </resources>

@@ -1,36 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="8dp">
+    android:gravity="start"
+    android:orientation="vertical"
+    android:paddingVertical="2dp">
 
     <LinearLayout
         android:id="@+id/messageContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="64dp"
-        android:background="@drawable/bg_prism_progress"
-        android:backgroundTint="#EEEEEE"
+        android:background="@drawable/bg_bubble_received"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp">
 
         <TextView
             android:id="@+id/messageText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Incoming message text"
-            android:textColor="@color/social_text_main"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/messageTime"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:layout_marginTop="4dp"
-            android:alpha="0.6"
-            android:text="10:45 AM"
-            android:textColor="@color/social_text_main"
-            android:textSize="10sp" />
+            android:textColor="@color/prism_text_primary"
+            android:textSize="16sp" />
     </LinearLayout>
-</RelativeLayout>
+
+    <TextView
+        android:id="@+id/messageTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginStart="4dp"
+        android:text="10:45 AM"
+        android:textColor="?attr/prismTextSecondary"
+        android:textSize="11sp" />
+</LinearLayout>

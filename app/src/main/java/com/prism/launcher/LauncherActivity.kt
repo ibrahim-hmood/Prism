@@ -36,6 +36,7 @@ class LauncherActivity : PrismBaseActivity() {
     private lateinit var mainAdapter: MainDesktopPagerAdapter
     private var browserPage: BrowserPageView? = null
     private var fileExplorerPage: com.prism.launcher.files.FileExplorerPageView? = null
+    private var nebulaSocialPage: com.prism.launcher.social.NebulaSocialPageView? = null
     private var discoveredPlugins: List<PluginPageInfo> = emptyList()
     private var pendingPickerSlot: Int = 1
     
@@ -45,6 +46,10 @@ class LauncherActivity : PrismBaseActivity() {
     private var touchSlop = 0f
     private var velocityTracker: VelocityTracker? = null
     private var overscrollTriggered = false
+
+    // Shake-to-lock: locks the current desktop page against swiping/the page-switcher overlay.
+    private lateinit var shakeDetector: ShakeDetector
+    private var pageLocked = false
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -92,6 +97,7 @@ class LauncherActivity : PrismBaseActivity() {
         }
         
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+        shakeDetector = ShakeDetector(this) { togglePageLock() }
 
         mainAdapter = MainDesktopPagerAdapter(
             activity = this,
@@ -159,6 +165,7 @@ class LauncherActivity : PrismBaseActivity() {
                         tryDismissFolder() -> Unit
                         tryConsumeBrowserBack() -> Unit
                         tryConsumeFileExplorerBack() -> Unit
+                        tryConsumeNebulaSocialBack() -> Unit
                         else -> {
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
@@ -179,6 +186,24 @@ class LauncherActivity : PrismBaseActivity() {
 
         requestNotificationPermissionIfNeeded()
         requestNotificationPermissionIfNeeded()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        shakeDetector.start()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shakeDetector.stop()
+    }
+
+    private fun togglePageLock() {
+        pageLocked = !pageLocked
+        binding.desktopPager.isUserInputEnabled = !pageLocked
+        binding.pageLockBadge.visibility = if (pageLocked) View.VISIBLE else View.GONE
+        window.decorView.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        Toast.makeText(this, if (pageLocked) "Page locked" else "Page unlocked", Toast.LENGTH_SHORT).show()
     }
 
     fun setBirdsEyeZoom(zoomOut: Boolean) {
@@ -221,6 +246,10 @@ class LauncherActivity : PrismBaseActivity() {
         fileExplorerPage = page
     }
 
+    fun attachNebulaSocialPage(page: com.prism.launcher.social.NebulaSocialPageView?) {
+        nebulaSocialPage = page
+    }
+
     fun addToDesktop(absolutePath: String, label: String) {
         val cells = desktopShortcutStore.readGrid(24)
         val emptySlot = cells.indexOfFirst { it == null }
@@ -250,6 +279,10 @@ class LauncherActivity : PrismBaseActivity() {
         return browserPage?.handleBack() ?: false
     }
 
+    private fun tryConsumeNebulaSocialBack(): Boolean {
+        return nebulaSocialPage?.handleBack() ?: false
+    }
+
     fun requestVpnPermission(intent: Intent) {
         vpnPermissionLauncher.launch(intent)
     }
@@ -261,6 +294,7 @@ class LauncherActivity : PrismBaseActivity() {
 
     private fun handleOverscrollDetection(ev: MotionEvent) {
         if (binding.pagePickerOverlay.visibility == View.VISIBLE) return
+        if (pageLocked) return
 
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -307,6 +341,20 @@ class LauncherActivity : PrismBaseActivity() {
     }
 
     private fun launchComponent(cn: ComponentName) {
+        if (PrismSettings.getVirtualizationEnabled(this) &&
+            PrismSettings.getVirtualizationMode(this) == PrismSettings.VIRT_MODE_PRISM_OS) {
+            val virtPos = findVirtualizationOsPosition()
+            if (virtPos != -1) {
+                binding.desktopPager.setCurrentItem(virtPos, true)
+                binding.root.postDelayed({
+                    (findPageViewAt(virtPos) as? com.prism.launcher.virtualization.VirtualizationPageView)
+                        ?.launchApp(cn)
+                }, 350)
+                logLaunchStat(cn)
+                return
+            }
+        }
+
         try {
             val intent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
@@ -317,19 +365,20 @@ class LauncherActivity : PrismBaseActivity() {
         } catch (e: Exception) {
             // Usually uninstalled while app is running
         }
-        
+
+        logLaunchStat(cn)
+    }
+
+    private fun logLaunchStat(cn: ComponentName) {
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val db = AppDatabase.get(this@LauncherActivity)
                 val hourOfDay = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
                 val cnStr = cn.flattenToString()
-                
-                // 1. Overall & Hourly Stats
                 val statDao = db.appLaunchStatDao()
                 if (statDao.increment(cnStr, hourOfDay) == 0) {
                     statDao.insertOrIgnore(AppLaunchStatEntity(cnStr, hourOfDay, 1))
                 }
-                
             } catch (e: Exception) {
                 // Ignore DB logging errors during launch
             }
@@ -337,6 +386,7 @@ class LauncherActivity : PrismBaseActivity() {
     }
 
     private fun openPagePicker(initialSlot: Int) {
+        if (pageLocked) return
         binding.pagePickerOverlay.visibility = View.VISIBLE
         animateMainZoom(true)
         discoveredPlugins = PluginPageDiscovery.discover(packageManager)
@@ -367,8 +417,10 @@ class LauncherActivity : PrismBaseActivity() {
         if (list.size <= 1) return
         list.removeAt(index)
         slotPreferences.saveAssignments(list)
-        
+
         mainAdapter.updateAssignments(list)
+        com.prism.launcher.social.SocialBotWorker.schedule(this)
+        com.prism.launcher.nora.NoraAutoTrainWorker.schedule(this)
         
         // Re-align current item if needed
         val current = binding.desktopPager.currentItem
@@ -417,6 +469,10 @@ class LauncherActivity : PrismBaseActivity() {
             PagePickChoice.KineticHalo -> SlotAssignment.KineticHalo
             PagePickChoice.FileExplorer -> SlotAssignment.FileExplorer
             PagePickChoice.NebulaSocial -> SlotAssignment.NebulaSocial
+            PagePickChoice.VirtualizationOs -> SlotAssignment.VirtualizationOs
+            PagePickChoice.Models -> SlotAssignment.Models
+            PagePickChoice.ModelStore -> SlotAssignment.ModelStore
+            PagePickChoice.AgenticTools -> SlotAssignment.AgenticTools
             is PagePickChoice.PluginPage -> SlotAssignment.Custom(
                 choice.info.packageName,
                 choice.info.viewClassName,
@@ -424,6 +480,8 @@ class LauncherActivity : PrismBaseActivity() {
         }
         slotPreferences.setAt(slot, assignment)
         mainAdapter.updateAssignments(slotPreferences.getAssignments())
+        com.prism.launcher.social.SocialBotWorker.schedule(this)
+        com.prism.launcher.nora.NoraAutoTrainWorker.schedule(this)
     }
 
     fun findPageViewAt(adapterPosition: Int): View? {
@@ -486,6 +544,9 @@ class LauncherActivity : PrismBaseActivity() {
         val list = slotPreferences.getAssignments()
         return list.indexOfFirst { it is SlotAssignment.AppDrawer }
     }
+
+    fun findVirtualizationOsPosition(): Int =
+        slotPreferences.getAssignments().indexOfFirst { it is SlotAssignment.VirtualizationOs }
 
     fun addToDesktop(item: DesktopItem) {
         val list = slotPreferences.getAssignments()

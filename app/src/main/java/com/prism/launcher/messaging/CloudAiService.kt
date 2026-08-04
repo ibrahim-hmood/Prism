@@ -1,6 +1,7 @@
 package com.prism.launcher.messaging
 
 import android.util.Log
+import com.prism.launcher.PrismLogger
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -94,11 +95,260 @@ object CloudAiService {
                 }
             } else {
                 val errorString = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                PrismLogger.logError("CloudAiService", "Cloud Error ($responseCode) from $url: $errorString")
                 "Cloud Error ($responseCode): $errorString"
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling $baseUrl" + "chat/completions", e)
             "Network Error: ${e.message}"
+        }
+    }
+
+    /**
+     * Streaming variant of [fetchResponse]: uses Server-Sent Events (`"stream": true`) and
+     * invokes [onToken] with each incremental piece of text as it arrives. [maxTokens] <= 0
+     * omits the `max_tokens` field entirely, letting the provider generate until it stops on
+     * its own. Still returns the full accumulated response text once the stream ends.
+     */
+    fun fetchResponseStreaming(baseUrl: String, apiKey: String, model: String, userText: String, base64Image: String? = null, maxTokens: Int = -1, onToken: (String) -> Unit): String {
+        return try {
+            val url = URL(baseUrl + "chat/completions")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+
+            val messages = JSONArray()
+            val userMessage = JSONObject()
+            userMessage.put("role", "user")
+
+            if (base64Image == null) {
+                userMessage.put("content", userText)
+            } else {
+                val contentArray = JSONArray()
+                contentArray.put(JSONObject().apply {
+                    put("type", "text")
+                    put("text", userText)
+                })
+                contentArray.put(JSONObject().apply {
+                    put("type", "image_url")
+                    put("image_url", JSONObject().apply {
+                        put("url", "data:image/jpeg;base64,$base64Image")
+                    })
+                })
+                userMessage.put("content", contentArray)
+            }
+            messages.put(userMessage)
+
+            val body = JSONObject()
+            body.put("model", model)
+            body.put("messages", messages)
+            body.put("stream", true)
+            if (maxTokens > 0) body.put("max_tokens", maxTokens)
+
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode != 200) {
+                val errorString = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                val error = "Cloud Error ($responseCode): $errorString"
+                PrismLogger.logError("CloudAiService", "Cloud Error ($responseCode) from $url: $errorString")
+                onToken(error)
+                return error
+            }
+
+            val accumulator = StringBuilder()
+            conn.inputStream.bufferedReader().useLines { lines ->
+                for (rawLine in lines) {
+                    val line = rawLine.trim()
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") break
+
+                    try {
+                        val chunk = JSONObject(data)
+                        val choices = chunk.optJSONArray("choices") ?: continue
+                        if (choices.length() == 0) continue
+                        val delta = choices.getJSONObject(0).optJSONObject("delta") ?: continue
+                        val piece = delta.optString("content", "")
+                        if (piece.isNotEmpty()) {
+                            accumulator.append(piece)
+                            onToken(piece)
+                        }
+                    } catch (e: Exception) {
+                        // Skip malformed/partial SSE chunks rather than aborting the whole stream
+                    }
+                }
+            }
+
+            if (accumulator.isEmpty()) "Error: No response received from stream." else accumulator.toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling $baseUrl" + "chat/completions", e)
+            val error = "Network Error: ${e.message}"
+            onToken(error)
+            error
+        }
+    }
+
+    /**
+     * Ollama's native chat endpoint (not the OpenAI-compat shim) — used for "Local Cloud" mode
+     * against a LAN-discovered [com.prism.launcher.messaging.OllamaDiscoveryService.OllamaServer].
+     * Streams newline-delimited JSON (NDJSON, one `{message:{content}, done}` object per line),
+     * not Server-Sent Events like [fetchResponseStreaming] — a different wire format, hence a
+     * sibling function rather than reusing the SSE parser.
+     */
+    fun fetchOllamaChatStreaming(host: String, port: Int, model: String, userText: String, onToken: (String) -> Unit): String {
+        return try {
+            val url = URL("http://$host:$port/api/chat")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 5000
+
+            val messages = JSONArray()
+            messages.put(JSONObject().apply {
+                put("role", "user")
+                put("content", userText)
+            })
+
+            val body = JSONObject()
+            body.put("model", model)
+            body.put("messages", messages)
+            body.put("stream", true)
+
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode != 200) {
+                val errorString = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                val error = "Ollama Error ($responseCode): $errorString"
+                PrismLogger.logError("CloudAiService", "Ollama Error ($responseCode) from $url: $errorString")
+                onToken(error)
+                return error
+            }
+
+            val accumulator = StringBuilder()
+            conn.inputStream.bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    if (line.isBlank()) continue
+                    try {
+                        val chunk = JSONObject(line)
+                        val piece = chunk.optJSONObject("message")?.optString("content", "") ?: ""
+                        if (piece.isNotEmpty()) {
+                            accumulator.append(piece)
+                            onToken(piece)
+                        }
+                        if (chunk.optBoolean("done", false)) break
+                    } catch (e: Exception) {
+                        // Skip malformed/partial NDJSON lines rather than aborting the whole stream
+                    }
+                }
+            }
+
+            if (accumulator.isEmpty()) "Error: No response received from Ollama." else accumulator.toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling http://$host:$port/api/chat", e)
+            val error = "Network Error: ${e.message}"
+            onToken(error)
+            error
+        }
+    }
+
+    /**
+     * Non-streaming variant of [fetchOllamaChatStreaming] — same NDJSON parsing, just
+     * accumulated silently instead of invoking a per-token callback.
+     */
+    fun fetchOllamaChat(host: String, port: Int, model: String, userText: String): String =
+        fetchOllamaChatStreaming(host, port, model, userText) { }
+
+    /**
+     * Non-streaming chat completion carrying a full `messages` history and an optional `tools`
+     * array (OpenAI-style function-calling) -- used only by [com.prism.launcher.agentic.AgenticEngine]'s
+     * tool-calling loop, where intermediate rounds (deciding whether to call a tool) aren't shown
+     * to the user token-by-token anyway. Returns the raw `message` object from the response
+     * (either `{"content":...}` or `{"tool_calls":[...]}`) for the caller to interpret; network/
+     * HTTP failures come back as a synthetic `{"content":"...error text..."}` message so callers
+     * can treat every outcome as a normal chat turn rather than special-casing exceptions.
+     */
+    fun fetchChatWithTools(baseUrl: String, apiKey: String, model: String, messages: JSONArray, tools: JSONArray?): JSONObject {
+        return try {
+            val url = URL(baseUrl + "chat/completions")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 20000
+            conn.readTimeout = 30000
+
+            val body = JSONObject().put("model", model).put("messages", messages)
+            if (tools != null && tools.length() > 0) body.put("tools", tools)
+
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val responseString = conn.inputStream.bufferedReader().use { it.readText() }
+                val choices = JSONObject(responseString).optJSONArray("choices")
+                choices?.optJSONObject(0)?.optJSONObject("message")
+                    ?: JSONObject().put("content", "Error: No response choices found.")
+            } else {
+                val errorString = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                PrismLogger.logError("CloudAiService", "Cloud Error ($responseCode) from $url: $errorString")
+                JSONObject().put("content", "Cloud Error ($responseCode): $errorString")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling $baseUrl" + "chat/completions", e)
+            JSONObject().put("content", "Network Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Non-streaming Ollama chat carrying a full `messages` history and an optional `tools` array
+     * -- Ollama deliberately mirrors OpenAI's `tools`/`tool_calls` shape. Sibling to
+     * [fetchChatWithTools] for the same tool-calling-loop use case; see that function's doc for
+     * why this is non-streaming and returns a raw message object rather than throwing.
+     */
+    fun fetchOllamaChatWithTools(host: String, port: Int, model: String, messages: JSONArray, tools: JSONArray?): JSONObject {
+        return try {
+            val url = URL("http://$host:$port/api/chat")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 20000
+            // Non-streaming, so the caller sees nothing until this returns -- and unlike a Cloud
+            // API, local Ollama inference on consumer hardware can genuinely take minutes: a cold
+            // model load (Ollama unloads after ~5min idle) plus a growing tool schema (every
+            // enabled tool's full JSON Schema is serialized into every request) both add real
+            // prefill/load time before generation even starts. 30s was cutting that off mid-response.
+            conn.readTimeout = 180000
+
+            val body = JSONObject().put("model", model).put("messages", messages).put("stream", false)
+            if (tools != null && tools.length() > 0) body.put("tools", tools)
+
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val responseString = conn.inputStream.bufferedReader().use { it.readText() }
+                JSONObject(responseString).optJSONObject("message")
+                    ?: JSONObject().put("content", "Error: No message in Ollama response.")
+            } else {
+                val errorString = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                PrismLogger.logError("CloudAiService", "Ollama Error ($responseCode) from $url: $errorString")
+                JSONObject().put("content", "Ollama Error ($responseCode): $errorString")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling http://$host:$port/api/chat", e)
+            JSONObject().put("content", "Network Error: ${e.message}")
         }
     }
 
@@ -136,10 +386,12 @@ object CloudAiService {
             } else {
                 val error = conn.errorStream?.bufferedReader()?.readText()
                 Log.e("CloudAi", "Image Gen Failed: $error")
+                PrismLogger.logError("CloudAiService", "Cloud Error ($responseCode) from $url (image gen): $error")
                 null
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            PrismLogger.logError("CloudAiService", "Network error calling $baseUrl" + "images/generations", e)
             null
         }
     }

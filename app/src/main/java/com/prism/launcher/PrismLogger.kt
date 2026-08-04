@@ -35,7 +35,7 @@ object PrismLogger {
         val message: String
     )
 
-    enum class Level { INFO, WARN, ERROR, SUCCESS }
+    enum class Level { INFO, WARN, ERROR, SUCCESS, DEBUG }
 
     fun init(context: Context) {
         val storage = Environment.getExternalStorageDirectory()
@@ -60,6 +60,11 @@ object PrismLogger {
     fun logInfo(tag: String, message: String) {
         append(Level.INFO, tag, message)
         Log.i(tag, message)
+    }
+
+    fun logDebug(tag: String, message: String) {
+        append(Level.DEBUG, tag, message)
+        Log.d(tag, message)
     }
 
     fun logWarning(tag: String, message: String) {

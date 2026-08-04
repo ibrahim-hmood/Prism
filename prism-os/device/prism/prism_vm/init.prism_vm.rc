@@ -1,0 +1,27 @@
+# PrismOS init.rc — runs inside the VM after Microdroid base init
+import /init.microdroid.rc
+
+on early-init
+    setprop ro.prism.vm 1
+
+on init
+    # Enable ADB over vsock (CID 10, port 5554) for host→guest app routing
+    setprop service.adb.tcp.port 5554
+    start adbd
+
+on boot
+    # Start the guest receiver that listens for app launch intents from the host
+    start prism_guest_receiver
+
+service prism_guest_receiver /system/bin/prism_guest_receiver
+    class main
+    user system
+    group system
+    seclabel u:r:prism_guest_receiver:s0
+    oneshot
+
+# Disable components not needed in a VM
+on property:ro.prism.vm=1
+    stop keystore
+    stop gatekeeperd
+    stop fingerprintd

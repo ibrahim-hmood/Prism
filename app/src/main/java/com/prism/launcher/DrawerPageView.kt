@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.GridLayoutManager
 import com.prism.launcher.databinding.PageDrawerRootBinding
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 
 class DrawerPageView(
     context: Context,
@@ -25,6 +26,8 @@ class DrawerPageView(
     private val adapter = DrawerAppsAdapter({ onLaunch(it) }, { allowDragToDesktop() })
     private var allApps: List<DrawerAppEntry> = emptyList()
     private var filterJob: Job? = null
+    private var observeJob: Job? = null
+    private var isReloading = false
     
     // Design tokens
     private val glowColor = PrismSettings.getGlowColor(context)
@@ -65,6 +68,14 @@ class DrawerPageView(
         
         binding.settingsBtn.setOnClickListener {
             context.startActivity(Intent(context, SettingsActivity::class.java))
+        }
+
+        // Reload Button Glow (same treatment as Settings)
+        binding.reloadBtnWrapper.background = NeonGlowDrawable(glowColor, 32f * resources.displayMetrics.density, 4f)
+        binding.reloadBtn.imageTintList = ColorStateList.valueOf(glowColor)
+
+        binding.reloadBtn.setOnClickListener {
+            reloadAppsFromPackageManager(binding)
         }
 
         binding.searchBar.addTextChangedListener(object : android.text.TextWatcher {
@@ -187,11 +198,45 @@ class DrawerPageView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        if (observeJob?.isActive == true) return
         val lifecycleOwner = context as? LifecycleOwner ?: return
+        // Live-observes the DB (rather than a one-shot fetch) so an app installed/removed
+        // while this page is already attached -- or via AppPackageReceiver in the background --
+        // shows up immediately, without needing to force-stop and relaunch the whole app.
+        observeJob = lifecycleOwner.lifecycleScope.launch {
+            AppDatabase.get(context).installedAppDao().observeAll().collectLatest { entities ->
+                allApps = withContext(Dispatchers.IO) { resolveDrawerEntries(entities) }
+                val grouped = groupDrawerApps(allApps)
+                adapter.submitList(grouped)
+            }
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        observeJob?.cancel()
+        observeJob = null
+        super.onDetachedFromWindow()
+    }
+
+    /**
+     * Full PackageManager rescan triggered by the reload button: wipes and repopulates the
+     * installed-apps table from scratch (same work [AppSyncWorker] does on first launch). The
+     * drawer's own list updates automatically afterward via the live Flow in [onAttachedToWindow]
+     * -- no manual re-submit needed here.
+     */
+    private fun reloadAppsFromPackageManager(binding: PageDrawerRootBinding) {
+        if (isReloading) return
+        val lifecycleOwner = context as? LifecycleOwner ?: return
+        isReloading = true
+        binding.reloadBtn.animate().rotationBy(360f).setDuration(500).start()
         lifecycleOwner.lifecycleScope.launch {
-            allApps = withContext(Dispatchers.IO) { resolveAppsFromDb() }
-            val grouped = groupDrawerApps(allApps)
-            adapter.submitList(grouped)
+            withContext(Dispatchers.IO) {
+                val dao = AppDatabase.get(context).installedAppDao()
+                dao.clearAll()
+                dao.insertAll(queryLauncherApps(context))
+            }
+            isReloading = false
+            android.widget.Toast.makeText(context, "Apps reloaded", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -218,17 +263,15 @@ class DrawerPageView(
     // -----------------------------------------------------------------------
 
     /**
-     * Reads package names from the Room DB, then resolves each to a
-     * [DrawerAppEntry] using PackageManager.
+     * Resolves DB rows to [DrawerAppEntry] via PackageManager. Called on every emission of the
+     * live [InstalledAppDao.observeAll] flow in [onAttachedToWindow].
      *
      * Falls back to a live PackageManager scan if the DB is still empty
      * (i.e. [AppSyncWorker] hasn't finished its first run yet).
      */
-    private suspend fun resolveAppsFromDb(): List<DrawerAppEntry> {
+    private fun resolveDrawerEntries(entities: List<InstalledAppEntity>): List<DrawerAppEntry> {
         val pm = context.packageManager
-        val dao = AppDatabase.get(context).installedAppDao()
 
-        val entities = dao.getAll()
         if (entities.isEmpty()) {
             // Fallback: DB not yet populated — do a live scan so the drawer isn't blank.
             return loadLauncherApps(pm)

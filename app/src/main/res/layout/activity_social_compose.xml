@@ -89,6 +89,16 @@
             </FrameLayout>
         </LinearLayout>
 
+        <ImageButton
+            android:id="@+id/btnGenerateImage"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Generate image with AI"
+            android:src="@drawable/ic_wand_24"
+            app:tint="@color/social_accent_green" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPost"
             android:layout_width="wrap_content"
@@ -160,6 +170,17 @@
         </LinearLayout>
     </ScrollView>
 
+    <ProgressBar
+        android:id="@+id/imageGenProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp"
+        android:indeterminate="true"
+        android:visibility="gone"
+        android:progressTint="@color/social_accent_green" />
+
     <!-- Toolbar area -->
     <View
         android:layout_width="match_parent"
@@ -191,6 +212,16 @@
             android:textColor="@android:color/white"
             android:fontFamily="sans-serif-medium" />
             
+        <ImageButton
+            android:id="@+id/composeMicBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Dictate"
+            android:padding="12dp"
+            android:src="@drawable/ic_mic_24"
+            app:tint="@color/social_accent_green" />
+
         <ImageButton
             android:layout_width="48dp"
             android:layout_height="48dp"

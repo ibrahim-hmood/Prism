@@ -15,7 +15,6 @@ import com.prism.launcher.databinding.PageMessagingRootBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.prism.launcher.NeonGlowDrawable
 
 class MessagingPageView(context: Context) : LinearLayout(context) {
 
@@ -36,10 +35,6 @@ class MessagingPageView(context: Context) : LinearLayout(context) {
         
         binding.messagingConversationList.layoutManager = LinearLayoutManager(context)
         binding.messagingConversationList.adapter = adapter
-
-        // Apply Neon Glow to Search
-        val glowColor = com.prism.launcher.PrismSettings.getGlowColor(context)
-        binding.messagingSearchContainer.background = NeonGlowDrawable(glowColor, 16f * resources.displayMetrics.density)
 
         binding.messagingRequestPermissionBtn.setOnClickListener {
             (context as? com.prism.launcher.LauncherActivity)?.requestMessagingPermissions()
@@ -71,8 +66,27 @@ class MessagingPageView(context: Context) : LinearLayout(context) {
 
     private fun loadSamOnly() {
         val sam = ThreadInfo(-100, "Sam", "Always here for you.")
-        adapter.update(listOf(sam))
+        // noraThread() parses Nora's transcript off disk, so it stays off the main thread.
+        val lifecycleOwner = context as? LifecycleOwner
+        if (lifecycleOwner == null) {
+            adapter.update(listOf(sam))
+            return
+        }
+        lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val nora = noraThread()
+            withContext(Dispatchers.Main) { adapter.update(listOf(sam, nora)) }
+        }
     }
+
+    /**
+     * Nora sits alongside Sam as a second permanent thread. She is a simulated visual cortex,
+     * not a language model -- see [com.prism.launcher.nora.NoraChat].
+     */
+    private fun noraThread() = ThreadInfo(
+        com.prism.launcher.nora.NoraChat.THREAD_ID,
+        com.prism.launcher.nora.NoraChat.DISPLAY_NAME,
+        com.prism.launcher.nora.NoraChatStore.lastSnippet(context)
+    )
 
     private fun loadThreads() {
         val lifecycleOwner = context as? LifecycleOwner ?: return
@@ -81,23 +95,28 @@ class MessagingPageView(context: Context) : LinearLayout(context) {
             
             // 1. Add Sam (Permanent AI)
             threads.add(ThreadInfo(-100, "Sam", "How can I help you?"))
-            
-            // 2. Load Real SMS Threads
+
+            // 2. Add Nora (Permanent, brain-based image/video generation)
+            threads.add(noraThread())
+
+            // 3. Load Real SMS Threads
             val uri = Uri.parse("content://mms-sms/conversations?simple=true")
-            val projection = arrayOf("_id", "recipient_ids", "snippet")
-            
+            val projection = arrayOf("_id", "recipient_ids", "snippet", "date")
+
             try {
                 context.contentResolver.query(uri, projection, null, null, "date DESC")?.use { cursor ->
                     val idIdx = cursor.getColumnIndex("_id")
                     val recIdx = cursor.getColumnIndex("recipient_ids")
                     val snipIdx = cursor.getColumnIndex("snippet")
+                    val dateIdx = cursor.getColumnIndex("date")
 
                     while (cursor.moveToNext()) {
                         val threadId = cursor.getLong(idIdx)
                         val recipientIds = cursor.getString(recIdx)
                         val snippet = cursor.getString(snipIdx) ?: ""
+                        val date = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
                         val address = resolveAddress(recipientIds)
-                        threads.add(ThreadInfo(threadId, address, snippet))
+                        threads.add(ThreadInfo(threadId, address, snippet, date))
                     }
                 }
             } catch (e: Exception) {

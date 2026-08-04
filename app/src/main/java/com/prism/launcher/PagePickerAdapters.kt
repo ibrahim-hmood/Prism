@@ -17,6 +17,10 @@ sealed interface PagePickChoice {
     data object FileExplorer : PagePickChoice
     data object NebulaSocial : PagePickChoice
     data class PluginPage(val info: PluginPageInfo) : PagePickChoice
+    data object VirtualizationOs : PagePickChoice
+    data object Models : PagePickChoice
+    data object ModelStore : PagePickChoice
+    data object AgenticTools : PagePickChoice
 }
 
 class PositionPickerAdapter(
@@ -126,7 +130,7 @@ class VerticalPageOptionsAdapter(
     private val onApply: (PagePickChoice) -> Unit,
 ) : RecyclerView.Adapter<VerticalPageOptionsAdapter.VH>() {
 
-    override fun getItemCount(): Int = 7 + plugins.size
+    override fun getItemCount(): Int = 11 + plugins.size
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val binding = ItemPageOptionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
@@ -162,8 +166,24 @@ class VerticalPageOptionsAdapter(
             holder.binding.optionTitle.text = "Nebula Social"
             holder.binding.optionSubtitle.text = "AI-powered social media graph"
             holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.NebulaSocial) }
+        } else if (position == 7) {
+            holder.binding.optionTitle.text = context.getString(R.string.slot_virtualization_os)
+            holder.binding.optionSubtitle.text = "Run PrismOS or a custom ISO"
+            holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.VirtualizationOs) }
+        } else if (position == 8) {
+            holder.binding.optionTitle.text = "Models"
+            holder.binding.optionSubtitle.text = "Manage imported AI models"
+            holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.Models) }
+        } else if (position == 9) {
+            holder.binding.optionTitle.text = "Model Store"
+            holder.binding.optionSubtitle.text = "Browse, search, and download AI models"
+            holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.ModelStore) }
+        } else if (position == 10) {
+            holder.binding.optionTitle.text = "Agentic Tools"
+            holder.binding.optionSubtitle.text = "Manage AI tool-calling and custom syntaxes"
+            holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.AgenticTools) }
         } else {
-            val p = plugins[position - 7]
+            val p = plugins[position - 11]
             holder.binding.optionTitle.text = p.label
             holder.binding.optionSubtitle.text = p.packageName
             holder.binding.optionApply.setOnClickListener { onApply(PagePickChoice.PluginPage(p)) }

@@ -70,7 +70,7 @@ class PrismProxyServer(
                         
                         // PORT PROTECTION: Only the general VPN Proxy should "jump" ports.
                         // The Hosting listener MUST stay on its assigned port (8080) to be reachable.
-                        if (isProxyMode && (port == 8080 || port == 8081)) {
+                        while (isProxyMode && (port == 8080 || port == 8081)) {
                             port = MeshUtils.findAvailablePort()
                         }
                         
@@ -169,7 +169,11 @@ class PrismProxyServer(
                             }
                         }
                     }
-                    PrismWebHost.serve(PrismApp.instance, finalSocket, domain)
+                    if (domain.equals(com.prism.launcher.mesh.P2pModelRegistry.MODEL_HOST_DOMAIN, ignoreCase = true)) {
+                        PrismAiHost.serve(PrismApp.instance, finalSocket)
+                    } else {
+                        PrismWebHost.serve(PrismApp.instance, finalSocket, domain)
+                    }
                 }
                 return@withContext
             }

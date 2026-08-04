@@ -61,6 +61,7 @@ object ModelDiscoveryService {
         override suspend fun search(query: String, category: String): List<DiscoveredModel> {
             val results = mutableListOf<DiscoveredModel>()
             val pipelineTag = when (category) {
+                "text" -> "text-generation"
                 "generative" -> "text-to-image"
                 "enhancement" -> "image-to-image"
                 "vision" -> "image-classification"
@@ -102,7 +103,7 @@ object ModelDiscoveryService {
                 for (i in 0 until tree.length()) {
                     val item = tree.getJSONObject(i)
                     val path = item.getString("path")
-                    if (path.endsWith(".task") || path.endsWith(".tflite")) {
+                    if (path.endsWith(".task") || path.endsWith(".tflite") || path.endsWith(".gguf")) {
                         files.add(path to item.optLong("size", 0L))
                     }
                 }
@@ -115,7 +116,7 @@ object ModelDiscoveryService {
         override suspend fun search(query: String, category: String): List<DiscoveredModel> {
             val results = mutableListOf<DiscoveredModel>()
             // GitHub Search API is strictly rate limited (10/min unauth). We use a broad search.
-            val q = "$query+extension:task+extension:tflite"
+            val q = "$query+extension:task+extension:tflite+extension:gguf"
             val searchUrl = "https://api.github.com/search/code?q=$q"
             
             try {

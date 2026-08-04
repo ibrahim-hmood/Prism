@@ -1,0 +1,6 @@
+@echo off
+echo building Prism...
+gradlew :app:assembleDebug
+echo installing Prism...
+gradlew :app:installDebug
+@echo on

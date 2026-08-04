@@ -92,7 +92,7 @@ class WhitelistAdapter(
         val text = android.widget.TextView(parent.context).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             textSize = 16f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(androidx.core.content.ContextCompat.getColor(parent.context, com.prism.launcher.R.color.prism_text_primary))
             setPadding(32, 0, 32, 0)
         }
         val check = CheckBox(parent.context)

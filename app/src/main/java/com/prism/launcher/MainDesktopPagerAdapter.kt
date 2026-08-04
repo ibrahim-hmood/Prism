@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.prism.launcher.browser.BrowserPageView
 import com.prism.launcher.files.FileExplorerPageView
 import com.prism.launcher.messaging.MessagingPageView
+import com.prism.launcher.virtualization.VirtualizationPageView
 
 class MainDesktopPagerAdapter(
     private val activity: LauncherActivity,
@@ -92,6 +93,15 @@ class MainDesktopPagerAdapter(
             SlotAssignment.KineticHalo -> KineticHaloPageView(activity, onLaunch)
             
             SlotAssignment.FileExplorer -> FileExplorerPageView(ctx)
+
+            SlotAssignment.VirtualizationOs ->
+                com.prism.launcher.virtualization.VirtualizationPageView(activity)
+
+            SlotAssignment.Models -> ModelsPageView(activity)
+
+            SlotAssignment.ModelStore -> ModelStorePageView(activity)
+
+            SlotAssignment.AgenticTools -> com.prism.launcher.agentic.AgenticToolsPageView(activity)
 
             SlotAssignment.Default -> DesktopGridPage(
                 ctx,

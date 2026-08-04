@@ -1,0 +1,14 @@
+# SELinux policy for the PrismOS guest bridge service
+type prism_guest_receiver, domain;
+type prism_guest_receiver_exec, exec_type, file_type;
+
+init_daemon_domain(prism_guest_receiver)
+
+# Allow binding to port 5554 (ADB/vsock bridge)
+allow prism_guest_receiver node:tcp_socket node_bind;
+allow prism_guest_receiver port:tcp_socket name_bind;
+
+# Allow starting activities (app launch forwarding)
+allow prism_guest_receiver activity_service:service_manager find;
+allow prism_guest_receiver *:binder { call transfer };
+allow prism_guest_receiver system_server:binder { call transfer };

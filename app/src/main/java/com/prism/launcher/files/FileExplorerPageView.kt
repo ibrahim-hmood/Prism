@@ -38,11 +38,15 @@ sealed class FileEntry {
     data class Local(val file: File) : FileEntry()
     data class Network(val storage: PrismSettings.NetworkStorage) : FileEntry()
     data object InternalStorageLink : FileEntry()
-    
+    data object AppStorageLink : FileEntry()
+    data class ExternalStorageLink(val label: String, val root: File) : FileEntry()
+
     val name: String get() = when(this) {
         is Local -> file.name
         is Network -> storage.name
         is InternalStorageLink -> "Internal Storage"
+        is AppStorageLink -> "App Storage"
+        is ExternalStorageLink -> label
     }
 }
 
@@ -53,6 +57,7 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
     private val pathText: TextView
     private val searchBar: android.widget.EditText
     private var allEntries: List<FileEntry> = emptyList()
+    private var externalVolumeRoots: List<FileEntry.ExternalStorageLink> = emptyList()
 
     internal fun resolveAttr(context: Context, attr: Int): Int {
         val typedValue = android.util.TypedValue()
@@ -77,6 +82,8 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
                     }
                     is FileEntry.Network -> navigateTo(ExplorerPath.Network(entry.storage))
                     is FileEntry.InternalStorageLink -> navigateTo(ExplorerPath.Local(Environment.getExternalStorageDirectory()))
+                    is FileEntry.AppStorageLink -> navigateTo(ExplorerPath.Local(context.filesDir))
+                    is FileEntry.ExternalStorageLink -> navigateTo(ExplorerPath.Local(entry.root))
                 }
             },
             onDragStarted = {
@@ -275,12 +282,15 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
         return when (val path = currentPath) {
             is ExplorerPath.Root -> false
             is ExplorerPath.Local -> {
-                val parent = path.dir.parentFile
-                val rootStorage = Environment.getExternalStorageDirectory().parentFile
-                if (parent != null && parent != rootStorage && parent.canRead()) {
-                    navigateTo(ExplorerPath.Local(parent))
-                } else {
+                if (isTopLevelRoot(path.dir)) {
                     navigateTo(ExplorerPath.Root)
+                } else {
+                    val parent = path.dir.parentFile
+                    if (parent != null && parent.canRead()) {
+                        navigateTo(ExplorerPath.Local(parent))
+                    } else {
+                        navigateTo(ExplorerPath.Root)
+                    }
                 }
                 true
             }
@@ -298,7 +308,10 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
                 pathText.text = "Prism Home"
                 val roots = mutableListOf<FileEntry>()
                 roots.add(FileEntry.InternalStorageLink)
-                com.prism.launcher.PrismSettings.getNetworkStorages(context).forEach { 
+                roots.add(FileEntry.AppStorageLink)
+                externalVolumeRoots = discoverExternalVolumes(context)
+                roots.addAll(externalVolumeRoots)
+                com.prism.launcher.PrismSettings.getNetworkStorages(context).forEach {
                     roots.add(FileEntry.Network(it))
                 }
                 allEntries = roots
@@ -329,6 +342,43 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
                 filterEntries(searchBar.text.toString())
             }
         }
+    }
+
+    /**
+     * Every non-primary storage volume (SD card, USB-OTG drive) exposed to this app, with a
+     * human-readable label. `getExternalFilesDirs()` only ever gives back an app-specific
+     * subdirectory per volume (index 0 is always the primary/internal volume, already handled
+     * separately) — the real volume root is derived by stripping the fixed
+     * `/Android/data/<pkg>/files` suffix, the standard technique for reaching a removable
+     * volume's true root pre-API-30. Readable once "All Files Access" is granted, same as
+     * Internal Storage.
+     */
+    private fun discoverExternalVolumes(context: Context): List<FileEntry.ExternalStorageLink> {
+        val appFilesDirs = context.getExternalFilesDirs(null)
+        if (appFilesDirs.size <= 1) return emptyList()
+
+        val descriptions = try {
+            val sm = context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
+            sm.storageVolumes
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        val result = mutableListOf<FileEntry.ExternalStorageLink>()
+        for (i in 1 until appFilesDirs.size) {
+            val appDir = appFilesDirs[i] ?: continue
+            val root = appDir.parentFile?.parentFile?.parentFile?.parentFile ?: continue
+            if (!root.exists() || !root.canRead()) continue
+            val label = descriptions.getOrNull(i)?.getDescription(context) ?: "External Storage $i"
+            result.add(FileEntry.ExternalStorageLink(label, root))
+        }
+        return result
+    }
+
+    private fun isTopLevelRoot(dir: File): Boolean {
+        if (dir.absolutePath == Environment.getExternalStorageDirectory().absolutePath) return true
+        if (dir.absolutePath == context.filesDir.absolutePath) return true
+        return externalVolumeRoots.any { it.root.absolutePath == dir.absolutePath }
     }
 
     private fun openFile(file: File) {
@@ -386,6 +436,8 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
                                 is FileEntry.Local -> if (entry.file.isDirectory) navigateTo(ExplorerPath.Local(entry.file)) else openFile(entry.file)
                                 is FileEntry.Network -> navigateTo(ExplorerPath.Network(entry.storage))
                                 is FileEntry.InternalStorageLink -> navigateTo(ExplorerPath.Local(Environment.getExternalStorageDirectory()))
+                                is FileEntry.AppStorageLink -> navigateTo(ExplorerPath.Local(context.filesDir))
+                                is FileEntry.ExternalStorageLink -> navigateTo(ExplorerPath.Local(entry.root))
                             }
                         }
                         "Move to Trash" -> if (entry is FileEntry.Local) moveToTrash(entry.file)
@@ -428,6 +480,8 @@ class FileExplorerPageView(context: Context) : FrameLayout(context) {
                 DesktopItem.NetworkedFolder(s.host, s.name, s.protocol)
             }
             is FileEntry.InternalStorageLink -> DesktopItem.DirectoryRef(Environment.getExternalStorageDirectory().absolutePath, "Internal Storage")
+            is FileEntry.AppStorageLink -> DesktopItem.DirectoryRef(context.filesDir.absolutePath, "App Storage")
+            is FileEntry.ExternalStorageLink -> DesktopItem.DirectoryRef(entry.root.absolutePath, entry.label)
         }
         (context as? LauncherActivity)?.addToDesktop(item)
     }
@@ -489,6 +543,14 @@ class FileExplorerAdapter(
             is FileEntry.InternalStorageLink -> {
                 holder.fileIcon.setImageResource(android.R.drawable.ic_dialog_email)
                 typeColor = android.graphics.Color.parseColor("#FFD700")
+            }
+            is FileEntry.AppStorageLink -> {
+                holder.fileIcon.setImageResource(android.R.drawable.ic_dialog_email)
+                typeColor = android.graphics.Color.parseColor("#7C9EFF")
+            }
+            is FileEntry.ExternalStorageLink -> {
+                holder.fileIcon.setImageResource(android.R.drawable.ic_dialog_email)
+                typeColor = android.graphics.Color.parseColor("#00BA7C")
             }
             is FileEntry.Network -> {
                 holder.fileIcon.setImageResource(android.R.drawable.stat_sys_download_done)

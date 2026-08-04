@@ -36,7 +36,7 @@ object NebulaInteractionBubble {
 
         val titleTv = TextView(context).apply {
             text = title
-            setTextColor(Color.WHITE)
+            setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.prism_text_primary))
             textSize = 14f
             setPadding(0, 0, 0, 8)
             alpha = 0.8f
@@ -50,14 +50,14 @@ object NebulaInteractionBubble {
         if (names.isEmpty()) {
             namesLayout.addView(TextView(context).apply {
                 text = "No interaction yet"
-                setTextColor(Color.WHITE)
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.prism_text_primary))
                 textSize = 16f
             })
         } else {
             names.take(5).forEach { name ->
                 namesLayout.addView(TextView(context).apply {
                     text = "• $name"
-                    setTextColor(Color.WHITE)
+                    setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.prism_text_primary))
                     textSize = 16f
                     setPadding(0, 4, 0, 4)
                 })
@@ -65,7 +65,7 @@ object NebulaInteractionBubble {
             if (names.size > 5) {
                 namesLayout.addView(TextView(context).apply {
                     text = "...and ${names.size - 5} others"
-                    setTextColor(Color.WHITE)
+                    setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.prism_text_primary))
                     textSize = 12f
                     alpha = 0.6f
                 })

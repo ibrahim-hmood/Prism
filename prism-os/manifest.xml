@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PrismOS AOSP Manifest
+  Branch: android-15.0.0_r1 (AOSP Android 15, Pixel target)
+
+  This manifest pins all required AOSP repositories for a minimal PrismOS build.
+  Full sync: ~70 GB on disk.
+  After sync: lunch prism_vm-userdebug && m
+
+  To sync:
+    repo init -u https://android.googlesource.com/platform/manifest -b android-15.0.0_r1
+    cp manifest.xml .repo/local_manifests/prism_os.xml
+    repo sync -c -j$(nproc) --no-tags
+
+  PrismOS-specific repos are under the <prism> remote.
+-->
+<manifest>
+
+  <!-- ── AOSP upstream remote ─────────────────────────────────────────────── -->
+  <remote name="aosp"
+          fetch="https://android.googlesource.com"
+          review="https://android-review.googlesource.com" />
+
+  <!-- ── PrismOS overlay remote (replace with your git host) ──────────────── -->
+  <remote name="prism"
+          fetch="https://github.com/prism-os" />
+
+  <default revision="android-15.0.0_r1"
+            remote="aosp"
+            sync-j="4"
+            sync-c="true" />
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       CORE PLATFORM — required for any Android build
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <project path="art"                       name="platform/art" />
+  <project path="bionic"                    name="platform/bionic" />
+  <project path="bootable/recovery"         name="platform/bootable/recovery" />
+  <project path="build/make"                name="platform/build" />
+  <project path="build/soong"               name="platform/build/soong" />
+  <project path="build/blueprint"           name="platform/build/blueprint" />
+  <project path="build/bazel"               name="platform/build/bazel" />
+  <project path="cts"                       name="platform/cts"
+            groups="pdk-cw-fs,pdk-fs" />
+  <project path="dalvik"                    name="platform/dalvik" />
+  <project path="developers/build"          name="developers/build" />
+  <project path="development"              name="platform/development" />
+  <project path="external/aac"             name="platform/external/aac" />
+  <project path="external/bouncycastle"    name="platform/external/bouncycastle" />
+  <project path="external/brotli"          name="platform/external/brotli" />
+  <project path="external/conscrypt"       name="platform/external/conscrypt" />
+  <project path="external/e2fsprogs"       name="platform/external/e2fsprogs" />
+  <project path="external/icu"             name="platform/external/icu" />
+  <project path="external/libcxx"          name="platform/external/libcxx" />
+  <project path="external/libcxxabi"       name="platform/external/libcxxabi" />
+  <project path="external/libpng"          name="platform/external/libpng" />
+  <project path="external/libtextclassifier" name="platform/external/libtextclassifier" />
+  <project path="external/lz4"             name="platform/external/lz4" />
+  <project path="external/minijail"        name="platform/external/minijail" />
+  <project path="external/openssl"         name="platform/external/openssl" />
+  <project path="external/protobuf"        name="platform/external/protobuf" />
+  <project path="external/skia"            name="platform/external/skia" />
+  <project path="external/sqlite"          name="platform/external/sqlite" />
+  <project path="external/zlib"            name="platform/external/zlib" />
+  <project path="frameworks/av"            name="platform/frameworks/av" />
+  <project path="frameworks/base"          name="platform/frameworks/base" />
+  <project path="frameworks/ex"            name="platform/frameworks/ex" />
+  <project path="frameworks/libs/net"      name="platform/frameworks/libs/net" />
+  <project path="frameworks/native"        name="platform/frameworks/native" />
+  <project path="frameworks/opt/net/wifi"  name="platform/frameworks/opt/net/wifi" />
+  <project path="frameworks/proto_logging" name="platform/frameworks/proto_logging" />
+  <project path="hardware/interfaces"      name="platform/hardware/interfaces" />
+  <project path="hardware/libhardware"     name="platform/hardware/libhardware" />
+  <project path="libcore"                  name="platform/libcore" />
+  <project path="libnativehelper"          name="platform/libnativehelper" />
+  <project path="packages/apps/Settings"   name="platform/packages/apps/Settings"
+            groups="pdk-cw-fs" />
+  <project path="packages/modules/Permission" name="platform/packages/modules/Permission" />
+  <project path="packages/modules/StatsD"  name="platform/packages/modules/StatsD" />
+  <project path="prebuilts/build-tools"    name="platform/prebuilts/build-tools" />
+  <project path="prebuilts/clang/host/linux-x86" name="platform/prebuilts/clang/host/linux-x86"
+            clone-depth="1" />
+  <project path="prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
+            name="platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9"
+            clone-depth="1" />
+  <project path="prebuilts/go/linux-x86"  name="platform/prebuilts/go/linux-x86"
+            clone-depth="1" />
+  <project path="prebuilts/misc"           name="platform/prebuilts/misc" />
+  <project path="prebuilts/python/linux-x86/3.11" name="platform/prebuilts/python/linux-x86/3.11"
+            clone-depth="1" />
+  <project path="prebuilts/sdk"            name="platform/prebuilts/sdk" />
+  <project path="system/apex"              name="platform/system/apex" />
+  <project path="system/bpf"              name="platform/system/bpf" />
+  <project path="system/core"             name="platform/system/core" />
+  <project path="system/extras"           name="platform/system/extras" />
+  <project path="system/hardware/interfaces" name="platform/system/hardware/interfaces" />
+  <project path="system/libbase"          name="platform/system/libbase" />
+  <project path="system/libfmq"           name="platform/system/libfmq" />
+  <project path="system/libhidl"          name="platform/system/libhidl" />
+  <project path="system/libziparchive"    name="platform/system/libziparchive" />
+  <project path="system/logging"          name="platform/system/logging" />
+  <project path="system/media"            name="platform/system/media" />
+  <project path="system/memory/libmemunreachable" name="platform/system/memory/libmemunreachable" />
+  <project path="system/netd"             name="platform/system/netd" />
+  <project path="system/security"         name="platform/system/security" />
+  <project path="system/sepolicy"         name="platform/system/sepolicy" />
+  <project path="system/tools/aidl"       name="platform/system/tools/aidl" />
+  <project path="system/vold"             name="platform/system/vold" />
+  <project path="tools/apksig"            name="platform/tools/apksig" />
+
+  <!-- ── Virtualization (Microdroid / AVF) ─────────────────────────────────── -->
+  <project path="packages/modules/Virtualization"
+            name="platform/packages/modules/Virtualization" />
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       PrismOS device overlay — replaces generic Google targets
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <project path="device/prism/prism_vm"
+            name="device-prism-prism_vm"
+            remote="prism"
+            revision="main" />
+  <project path="vendor/prism/prism_vm"
+            name="vendor-prism-prism_vm"
+            remote="prism"
+            revision="main" />
+
+</manifest>

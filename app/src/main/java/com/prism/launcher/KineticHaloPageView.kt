@@ -17,8 +17,10 @@ import android.widget.ImageView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.*
 
 /**
@@ -31,6 +33,7 @@ class KineticHaloPageView(
 ) : FrameLayout(context) {
 
     private var allApps: List<DrawerAppEntry> = emptyList()
+    private var observeJob: Job? = null
     private val activeIcons = mutableListOf<AppIconView>()
     
     // Interaction state
@@ -55,15 +58,26 @@ class KineticHaloPageView(
     init {
         setWillNotDraw(false)
         setBackgroundColor(Color.TRANSPARENT)
-        loadApps()
     }
 
-    private fun loadApps() {
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (observeJob?.isActive == true) return
         val lifecycleOwner = context as? LifecycleOwner ?: return
-        lifecycleOwner.lifecycleScope.launch {
-            allApps = withContext(Dispatchers.IO) { resolveAppsFromDb() }
-            setupIcons()
+        // Live-observes the DB so a newly installed/removed app is reflected immediately,
+        // matching the same fix applied to DrawerPageView (was previously a one-shot load).
+        observeJob = lifecycleOwner.lifecycleScope.launch {
+            AppDatabase.get(context).installedAppDao().observeAll().collectLatest { entities ->
+                allApps = withContext(Dispatchers.IO) { resolveDrawerEntries(entities) }
+                setupIcons()
+            }
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        observeJob?.cancel()
+        observeJob = null
+        super.onDetachedFromWindow()
     }
 
     private fun setupIcons() {
@@ -193,9 +207,8 @@ class KineticHaloPageView(
         return a
     }
 
-    private suspend fun resolveAppsFromDb(): List<DrawerAppEntry> {
+    private fun resolveDrawerEntries(entities: List<InstalledAppEntity>): List<DrawerAppEntry> {
         val pm = context.packageManager
-        val entities = AppDatabase.get(context).installedAppDao().getAll()
         return entities.mapNotNull { entity ->
             try {
                 val cn = android.content.ComponentName(entity.packageName, entity.activityClass)

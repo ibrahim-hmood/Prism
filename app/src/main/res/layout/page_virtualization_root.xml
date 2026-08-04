@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <!-- VM display surface — fills the entire page. Must stay VISIBLE for its whole lifetime:
+         SurfaceView only allocates its underlying Surface (firing surfaceCreated()) while its own
+         visibility is VISIBLE, so toggling this off — which the boot overlay below made
+         unnecessary anyway, since it opaquely covers this surface whenever the VM isn't running —
+         previously meant surfaceCreated() (and therefore the whole boot sequence) never fired at
+         all. -->
+    <SurfaceView
+        android:id="@+id/vmSurface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Boot / stopped overlay — shown when VM is not yet running. Opaque background so it fully
+         covers vmSurface (which stays visible underneath) instead of just the centered spinner. -->
+    <FrameLayout
+        android:id="@+id/bootOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:gravity="center">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp">
+
+            <ProgressBar
+                android:id="@+id/bootProgress"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:visibility="visible" />
+
+            <TextView
+                android:id="@+id/tvBootLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="320dp"
+                android:gravity="center"
+                android:text="@string/virt_status_booting"
+                android:textSize="14sp"
+                android:alpha="0.7" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Control bar — pinned to top, shown over the VM surface -->
+    <LinearLayout
+        android:id="@+id/controlBar"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_gravity="top"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:background="@drawable/hotseat_glass_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnVmPower"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Power"
+            android:src="@android:drawable/ic_lock_power_off"
+            android:tint="?android:attr/textColorPrimary" />
+
+        <TextView
+            android:id="@+id/tvVmStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/virt_status_running"
+            android:textSize="13sp"
+            android:alpha="0.85" />
+
+        <ImageButton
+            android:id="@+id/btnVmKeyboard"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Toggle keyboard"
+            android:src="@android:drawable/ic_menu_myplaces"
+            android:tint="?android:attr/textColorPrimary" />
+
+    </LinearLayout>
+
+</FrameLayout>

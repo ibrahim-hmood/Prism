@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.prism.launcher"
     compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.prism.launcher"
@@ -17,6 +18,13 @@ android {
 
         ndk {
             abiFilters.add("arm64-v8a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -43,6 +51,18 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+        // The bundled QEMU binary (jniLibs/arm64-v8a/libqemu_system_aarch64.so — see
+        // VmController.resolveQemuBinary) needs to be a real executable file in nativeLibraryDir
+        // at install time, not left mmap'd inside the APK, since it's exec()'d as a subprocess
+        // rather than dlopen()'d as a JNI library.
+        jniLibs {
+            useLegacyPackaging = true
+            // AGP strips native libraries on the way into the APK by default, same as the build
+            // script's own (now-disabled) llvm-strip pass -- without this, gdb still shows a bare
+            // "?? ()" with no module name at the crash site even once the build itself keeps
+            // debug info, since Gradle would strip it right back out during packaging.
+            keepDebugSymbols += "**/libqemu-system-aarch64.so"
         }
     }
 }

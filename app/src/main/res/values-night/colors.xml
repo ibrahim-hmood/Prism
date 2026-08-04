@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode overrides for the text colors declared in values/colors.xml -->
+    <color name="prism_text_primary">#FFF5F5F7</color>
+    <color name="prism_text_muted">#B3FFFFFF</color>
+    <color name="prism_text_secondary">#99FFFFFF</color>
+    <color name="social_text_main">#FFFFFFFF</color>
+
+    <!-- Dark-mode overrides for the iMessage bubble colors declared in values/colors.xml -->
+    <color name="imessage_blue">#FF0A84FF</color>
+    <color name="imessage_bubble_received">#FF26252A</color>
+</resources>

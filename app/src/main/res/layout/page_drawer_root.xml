@@ -61,6 +61,25 @@
                         android:contentDescription="Settings"
                         android:src="@drawable/ic_settings_24" />
                 </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/reloadBtnWrapper"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_toStartOf="@id/settingsBtnWrapper"
+                    android:layout_centerVertical="true"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:padding="8dp">
+
+                    <ImageButton
+                        android:id="@+id/reloadBtn"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Reload apps"
+                        android:src="@drawable/ic_refresh_24" />
+                </FrameLayout>
             </RelativeLayout>
 
             <!-- Padding for Neon Glow container remains unclipped -->

@@ -38,7 +38,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="2"
-        android:textColor="@android:color/white"
+        android:textColor="@color/prism_text_primary"
         android:textSize="12sp"
         android:lineSpacingExtra="2dp" />
 

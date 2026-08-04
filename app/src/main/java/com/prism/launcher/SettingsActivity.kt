@@ -5,6 +5,7 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -18,49 +19,20 @@ import com.prism.launcher.databinding.ItemSettingNavBinding
 import com.prism.launcher.databinding.ItemSettingToggleBinding
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.app.DownloadManager
-import android.os.Environment
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import com.prism.launcher.messaging.ModelDiscoveryService
 import kotlinx.coroutines.withContext
 import android.provider.OpenableColumns
+import com.prism.launcher.browser.P2pDnsManager
 
 class SettingsActivity : PrismBaseActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var adapter: SettingsAdapter
     
-    private var pendingDownloadUrl: String? = null
-    private var pendingDownloadName: String? = null
-
-    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
-            pendingDownloadUrl?.let { url ->
-                pendingDownloadName?.let { name ->
-                    startDownloadSequence(name, url)
-                }
-            }
-        } else {
-            Toast.makeText(this, "Storage permission required for downloads", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private val downloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-            if (id != -1L && id == PrismSettings.getAiDownloadId(context)) {
-                checkDownloadStatus(id)
-            }
-        }
-    }
-
     private val fontPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             copyFontToInternal(uri)
@@ -70,11 +42,36 @@ class SettingsActivity : PrismBaseActivity() {
     private val modelPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val fileName = getFileNameFromUri(uri)
-            copyUriToInternal(uri, fileName, isPickingImageModel)
+            com.prism.launcher.messaging.ModelDownloadManager.copyUriToInternal(this, uri, fileName, isPickingImageModel) { success, error ->
+                if (success) {
+                    adapter.setItems(buildItems())
+                } else {
+                    Toast.makeText(this, "Import failed: $error Please try again.", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
     
     private var isPickingImageModel = false
+
+    private var ollamaScanResults: List<com.prism.launcher.messaging.OllamaDiscoveryService.OllamaServer> = emptyList()
+    private var ollamaScanning = false
+
+    private fun rescanOllama() {
+        ollamaScanning = true
+        adapter.setItems(buildItems())
+        lifecycleScope.launch(Dispatchers.IO) {
+            val results = com.prism.launcher.messaging.OllamaDiscoveryService.scan(this@SettingsActivity)
+            withContext(Dispatchers.Main) {
+                ollamaScanResults = results
+                ollamaScanning = false
+                adapter.setItems(buildItems())
+                if (results.isEmpty()) {
+                    Toast.makeText(this@SettingsActivity, "No Ollama servers found on this network", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     private fun copyFontToInternal(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) {
@@ -92,6 +89,83 @@ class SettingsActivity : PrismBaseActivity() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+    }
+
+    private val isoPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) copyIsoToInternal(uri)
+    }
+
+    // ── Nora backup / import ────────────────────────────────────────────────
+
+    private val noraBackupPicker =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+            if (uri == null) return@registerForActivityResult
+            lifecycleScope.launch {
+                val result = com.prism.launcher.nora.NoraArchive.backup(this@SettingsActivity, uri)
+                showNoraArchiveResult(if (result.ok) "Backup complete" else "Backup failed", result.message)
+            }
+        }
+
+    private val noraImportPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            AlertDialog.Builder(this)
+                .setTitle("Import Nora?")
+                .setMessage(
+                    "This overwrites her connectome and merges the archive's images into your " +
+                        "dataset folder. Anything she has learned since your last backup will be lost."
+                )
+                .setPositiveButton("Import") { _, _ ->
+                    lifecycleScope.launch {
+                        val result = com.prism.launcher.nora.NoraArchive.import(this@SettingsActivity, uri)
+                        showNoraArchiveResult(
+                            if (result.ok) "Import complete" else "Import failed",
+                            result.message
+                        )
+                        if (result.ok) adapter.setItems(buildItems())
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+    private fun showNoraArchiveResult(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    /**
+     * QEMU is a native process and can't resolve content:// URIs — it needs a real path on disk.
+     * Mirrors [copyFontToInternal]: copy the picked ISO into internal storage once, then store
+     * that absolute path, instead of persisting the content:// URI string directly (which is what
+     * made "loading an ISO" silently do nothing — VmController was handing QEMU a URI it could
+     * never open).
+     */
+    private fun copyIsoToInternal(uri: Uri) {
+        Toast.makeText(this, "Importing ISO…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val displayName = getFileNameFromUri(uri).ifBlank { "custom.iso" }
+                val destDir = java.io.File(filesDir, "prism_os").apply { mkdirs() }
+                val file = java.io.File(destDir, displayName)
+                contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw java.io.IOException("Could not open the selected ISO")
+
+                withContext(Dispatchers.Main) {
+                    PrismSettings.setCustomIsoPath(this@SettingsActivity, file.absolutePath)
+                    adapter.setItems(buildItems())
+                    Toast.makeText(this@SettingsActivity, "ISO imported", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@SettingsActivity, "Failed to import ISO: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -118,33 +192,8 @@ class SettingsActivity : PrismBaseActivity() {
         }
     }
 
-    private fun downloadModel(name: String, url: String) {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q &&
-            androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            pendingDownloadUrl = url
-            pendingDownloadName = name
-            permissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        } else {
-            startDownloadSequence(name, url)
-        }
-    }
-
-    private fun startDownloadSequence(name: String, url: String) {
-        val extension = if (url.endsWith(".task")) "task" else "bin"
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("Downloading $name")
-            .setDescription("Prism AI Model")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "PrismAI/$name.$extension")
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-            .addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
-
-        val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        val downloadId = dm.enqueue(request)
-        PrismSettings.setAiDownloadId(this, downloadId)
-        
-        Toast.makeText(this, "Download started: $name", Toast.LENGTH_SHORT).show()
+    private fun downloadModel(name: String, url: String, isImageModel: Boolean = false) {
+        com.prism.launcher.messaging.ModelDownloadManager.download(this, name, url, isImageModel)
         adapter.setItems(buildItems())
     }
 
@@ -177,100 +226,6 @@ class SettingsActivity : PrismBaseActivity() {
         return name
     }
 
-    private fun checkDownloadStatus(id: Long) {
-        val q = DownloadManager.Query().setFilterById(id)
-        val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        dm.query(q)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    val uriString = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                    val localUri = Uri.parse(uriString)
-                    
-                    // Always try to get a clean filename from the URI
-                    val fileName = localUri.lastPathSegment ?: "downloaded_model.task"
-                    
-                    // Route to correct ingestion loop based on type
-                    val isImage = fileName.contains("SD", ignoreCase = true) || fileName.contains("Diffusion", ignoreCase = true)
-                    copyUriToInternal(localUri, fileName, isImage)
-                    
-                    Toast.makeText(this, "AI Model downloaded successfully!", Toast.LENGTH_LONG).show()
-                } else if (status == DownloadManager.STATUS_FAILED) {
-                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    if (reason == 401 || reason == 403) {
-                        PrismDialogFactory.show(
-                            this,
-                            "Access Denied",
-                            "The download failed because the source requires authentication (Error $reason). Would you like to search for a working mirror?",
-                            onPositive = { startModelDiscovery() },
-                            positiveText = "Search Web",
-                            negativeText = "Dismiss"
-                        )
-                    } else {
-                        Toast.makeText(this, "Download failed (Reason: $reason)", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-    }
-
-    private fun copyUriToInternal(uri: Uri, fileName: String, isImageModel: Boolean = false) {
-        val modelsDir = java.io.File(filesDir, "models")
-        if (!modelsDir.exists()) modelsDir.mkdirs()
-
-        val targetFile = java.io.File(modelsDir, fileName)
-        
-        val progressDialog = PrismDialogFactory.show(
-            this,
-            "Ingesting Intelligence",
-            "Synchronizing $fileName to local neural storage...",
-            positiveText = null, 
-            negativeText = null,
-            showProgress = false // Changed to false because we use input.copyTo now which doesn't give mid-progress callback easily here
-        )
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val fileSize = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-                
-                contentResolver.openInputStream(uri)?.use { input ->
-                    java.io.FileOutputStream(targetFile).use { fos ->
-                        val output = java.io.BufferedOutputStream(fos)
-                        input.copyTo(output)
-                        output.flush()
-                        fos.getFD().sync() // Force physical write to disk
-                    }
-                }
-                
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    progressDialog.dismiss()
-                    if (isImageModel) {
-                        PrismSettings.setLocalImageModelPath(this@SettingsActivity, targetFile.absolutePath)
-                    } else {
-                        PrismSettings.setLocalAiModelPath(this@SettingsActivity, targetFile.absolutePath)
-                    }
-                    adapter.setItems(buildItems())
-                    Toast.makeText(this@SettingsActivity, "Intelligence Acquired: $fileName", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    progressDialog.dismiss()
-                    Toast.makeText(this@SettingsActivity, "Sync Error: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), RECEIVER_EXPORTED)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        unregisterReceiver(downloadReceiver)
-    }
 
     private fun pickLocalModel() {
         PrismDialogFactory.show(
@@ -321,6 +276,14 @@ class SettingsActivity : PrismBaseActivity() {
         adapter = SettingsAdapter(buildItems(), this::onItemClick)
         binding.settingsList.layoutManager = LinearLayoutManager(this)
         binding.settingsList.adapter = adapter
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Cloud model profiles (and which one is active) can change in CloudModelsActivity,
+        // or on the Models desktop page, while this screen sits in the background -- refresh
+        // so the "Manage Cloud Models" subtitle and AI Engine mode stay accurate on return.
+        if (::adapter.isInitialized) adapter.setItems(buildItems())
     }
 
     private fun getLocalIpAddress(): String {
@@ -567,6 +530,101 @@ class SettingsActivity : PrismBaseActivity() {
                 PrismSettings.getPrivateTabsLocked(this),
                 { PrismSettings.setPrivateTabsLocked(this, it) }
             ),
+            
+            SettingItem.Header("Access Points (Hotspot Gateway)"),
+            SettingItem.Nav(
+                "Manage Access Points",
+                "${PrismSettings.getAccessPoints(this).size} hotspot(s) configured",
+                {
+                    startActivity(android.content.Intent(this@SettingsActivity, com.prism.launcher.accesspoint.AccessPointPortalActivity::class.java))
+                }
+            ),
+            SettingItem.Toggle(
+                "Enable DNS Proxy",
+                "Listen on 0.0.0.0:53 for P2P DNS queries from connected devices",
+                PrismSettings.getDnsProxyEnabled(this),
+                { enabled ->
+                    PrismSettings.setDnsProxyEnabled(this, enabled)
+                    if (enabled) {
+                        startService(android.content.Intent(this@SettingsActivity, com.prism.launcher.browser.DnsProxyService::class.java))
+                        Toast.makeText(this@SettingsActivity, "DNS Proxy started on port 53", Toast.LENGTH_SHORT).show()
+                    } else {
+                        stopService(android.content.Intent(this@SettingsActivity, com.prism.launcher.browser.DnsProxyService::class.java))
+                        Toast.makeText(this@SettingsActivity, "DNS Proxy stopped", Toast.LENGTH_SHORT).show()
+                    }
+                    adapter.setItems(buildItems())
+                }
+            ),
+            SettingItem.Picker(
+                "DNS Proxy Mode",
+                "Behavior when domain is not in P2P DNS",
+                listOf("P2P Isolation (NXDOMAIN)", "Fallback to Global DNS"),
+                if (PrismSettings.getDnsProxyMode(this) == "fallback") 1 else 0,
+                { idx ->
+                    val mode = if (idx == 1) "fallback" else "p2p_only"
+                    PrismSettings.setDnsProxyMode(this, mode)
+                },
+                isEnabled = PrismSettings.getDnsProxyEnabled(this)
+            ),
+            SettingItem.Nav(
+                "P2P DNS Records",
+                "${P2pDnsManager.getRecords().size} domains in local DNS ledger",
+                {
+                    startActivity(android.content.Intent(this@SettingsActivity, com.prism.launcher.browser.P2pDnsActivity::class.java))
+                }
+            ),
+            SettingItem.Nav(
+                "P2P Web Hosting",
+                "Serve local websites on .p2p domains",
+                {
+                    startActivity(android.content.Intent(this@SettingsActivity, com.prism.launcher.browser.P2pHostingActivity::class.java))
+                }
+            ),
+            SettingItem.Toggle(
+                "Host My Active Model",
+                "Let other Prism peers on your mesh use your currently active local AI model",
+                PrismSettings.getP2pModelHostingEnabled(this),
+                { enabled ->
+                    PrismSettings.setP2pModelHostingEnabled(this, enabled)
+                    if (enabled) {
+                        val modelPath = PrismSettings.getLocalAiModelPath(this)
+                        val displayName = PrismSettings.getImportedModels(this).find { it.path == modelPath }?.displayName
+                            ?: modelPath.substringAfterLast('/').ifBlank { "Local Model" }
+                        com.prism.launcher.mesh.P2pModelRegistry.announce(this, displayName)
+                    } else {
+                        com.prism.launcher.mesh.P2pModelRegistry.revoke(this)
+                    }
+                    adapter.setItems(buildItems())
+                },
+                isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getVpnMode(this) == PrismSettings.VPN_MODE_PRISM && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_SERVER
+            ),
+            run {
+                val hostedModels = com.prism.launcher.mesh.P2pModelRegistry.getAll()
+                    .filter { it.peerIp != MeshUtils.getLocalMeshIp(this) }
+                val selected = PrismSettings.getSelectedP2pModel(this)
+                val options = listOf("None (use Local/Cloud AI)") + hostedModels.map { "${it.peerIp} • ${it.modelName}" }
+                val currentIdx = if (selected == null) {
+                    0
+                } else {
+                    (hostedModels.indexOfFirst { it.peerIp == selected.peerIp && it.modelName == selected.modelName } + 1).coerceAtLeast(0)
+                }
+                SettingItem.Picker(
+                    "P2P Models",
+                    if (hostedModels.isEmpty()) "No models currently hosted by peers on your mesh" else "Use an AI model hosted by another peer on your mesh",
+                    options,
+                    currentIdx,
+                    { idx ->
+                        if (idx == 0) {
+                            PrismSettings.clearSelectedP2pModel(this)
+                        } else {
+                            val m = hostedModels[idx - 1]
+                            PrismSettings.setSelectedP2pModel(this, m.peerIp, m.modelName)
+                        }
+                        adapter.setItems(buildItems())
+                    },
+                    isEnabled = PrismSettings.getVpnTunnelingEnabled(this) && PrismSettings.getPrismVpnRole(this) == PrismSettings.PRISM_ROLE_CLIENT
+                )
+            },
             SettingItem.TextInput(
                 "Primary DNS",
                 "Used by the private VPN tunnel",
@@ -631,47 +689,76 @@ class SettingsActivity : PrismBaseActivity() {
             SettingItem.Header("Intelligence & Messaging"),
             SettingItem.Picker(
                 "Prism AI Engine",
-                "Choose between local on-device AI or cloud LLM",
-                listOf("Local TFLite", "Cloud API"),
-                if (PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD) 1 else 0,
-                { 
-                    PrismSettings.setAiMode(this, if (it == 1) PrismSettings.AI_MODE_CLOUD else PrismSettings.AI_MODE_LOCAL)
-                    adapter.setItems(buildItems())
+                "Choose between local on-device AI, cloud LLM, or a Local Cloud (Ollama) server found on your WiFi network",
+                listOf("Local AI", "Cloud API", "Local Cloud (Ollama)"),
+                when (PrismSettings.getAiMode(this)) {
+                    PrismSettings.AI_MODE_CLOUD -> 1
+                    PrismSettings.AI_MODE_LOCAL_CLOUD -> 2
+                    else -> 0
+                },
+                { idx ->
+                    val newMode = when (idx) {
+                        1 -> PrismSettings.AI_MODE_CLOUD
+                        2 -> PrismSettings.AI_MODE_LOCAL_CLOUD
+                        else -> PrismSettings.AI_MODE_LOCAL
+                    }
+                    PrismSettings.setAiMode(this, newMode)
+                    if (newMode == PrismSettings.AI_MODE_LOCAL_CLOUD && ollamaScanResults.isEmpty() && !ollamaScanning) {
+                        rescanOllama()
+                    } else {
+                        adapter.setItems(buildItems())
+                    }
                 }
             ),
-            
-            SettingItem.TextInput(
-                "Cloud API Key",
-                "OpenAI, Gemini, or custom provider key",
-                PrismSettings.getCloudAiKey(this),
-                { PrismSettings.setCloudAiKey(this, it) },
-                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD,
-                isSingleLine = true,
-                isEncoded = true
+            SettingItem.Nav(
+                "Rescan Network for Ollama",
+                if (ollamaScanning) "Scanning your WiFi network…" else "Find Ollama servers hosting models on your network",
+                { if (!ollamaScanning) rescanOllama() },
+                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL_CLOUD && !ollamaScanning
             ),
-            SettingItem.TextInput(
-                "Cloud Base URL",
-                "Endpoint root (must be OpenAI compatible)",
-                PrismSettings.getCloudAiBaseUrl(this),
-                { PrismSettings.setCloudAiBaseUrl(this, it) },
-                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD,
-                isSingleLine = true
-            ),
-            SettingItem.TextInput(
-                "Cloud Model ID",
-                "e.g. gpt-4o, gemini-1.5-pro",
-                PrismSettings.getCloudAiModel(this),
-                { PrismSettings.setCloudAiModel(this, it) },
-                isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD
-            ),
+            run {
+                val entries = ollamaScanResults.flatMap { server -> server.models.map { m -> server to m } }
+                val selected = PrismSettings.getSelectedOllamaEndpoint(this)
+                val options = if (entries.isEmpty()) listOf("None found yet") else entries.map { (s, m) -> "${s.host} • $m" }
+                val currentIdx = entries.indexOfFirst { (s, m) -> selected != null && s.host == selected.host && m == selected.model }
+                SettingItem.Picker(
+                    "Ollama Server & Model",
+                    if (entries.isEmpty()) "Tap \"Rescan Network for Ollama\" above to search" else "Pick which discovered model Prism should use",
+                    options,
+                    currentIdx.coerceAtLeast(0),
+                    { idx ->
+                        if (entries.isNotEmpty()) {
+                            val (server, modelName) = entries[idx]
+                            PrismSettings.setSelectedOllamaEndpoint(this, PrismSettings.OllamaEndpoint(server.host, server.port, modelName))
+                            adapter.setItems(buildItems())
+                        }
+                    },
+                    isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL_CLOUD && entries.isNotEmpty()
+                )
+            },
+
+            run {
+                val cloudModels = PrismSettings.getCloudModels(this)
+                val active = PrismSettings.getActiveCloudModel(this)
+                SettingItem.Nav(
+                    "Manage Cloud Models",
+                    when {
+                        cloudModels.isEmpty() -> "No cloud models saved yet"
+                        active != null -> "${cloudModels.size} saved • Active: ${active.modelId}"
+                        else -> "${cloudModels.size} saved • None active"
+                    },
+                    { startActivity(android.content.Intent(this, CloudModelsActivity::class.java)) },
+                    isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_CLOUD
+                )
+            },
 
             SettingItem.Nav(
                 "Local AI Model",
-                "Select a .task or .bin LLM from storage",
+                "Select a .task, .gguf, or .bin LLM from storage",
                 { pickLocalModel() },
                 isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL
             ),
-            
+
             SettingItem.Header("Available LLM Models"),
             SettingItem.Nav(
                 "Falcon-1B RefinedWeb",
@@ -695,15 +782,177 @@ class SettingsActivity : PrismBaseActivity() {
             SettingItem.Header("Visual Intelligence (Diffusion)"),
             SettingItem.Nav(
                 "Search for Models",
-                "Find working Stable Diffusion mirrors on Hugging Face",
-                { startModelDiscovery() }
+                "Browse, search, and download text and image models from the Model Store",
+                { startActivity(android.content.Intent(this, ModelStoreActivity::class.java)) }
             ),
             SettingItem.Nav(
                 "Stable Diffusion v1.5",
                 "Generate realistic images locally (~2GB RAM needed)",
-                { downloadModel("SD-1.5", PrismSettings.MODEL_SD_1_5_CPU) },
+                { downloadModel("SD-1.5", PrismSettings.MODEL_SD_1_5_CPU, isImageModel = true) },
                 isEnabled = PrismSettings.getAiMode(this) == PrismSettings.AI_MODE_LOCAL
             ),
+
+            SettingItem.Header("Nora (Brain-Based Generation)"),
+            SettingItem.Nav(
+                "Train Nora",
+                "Teach her from images, and watch her connectome while she learns",
+                { startActivity(android.content.Intent(this, com.prism.launcher.nora.NoraTrainingActivity::class.java)) }
+            ),
+            SettingItem.Nav(
+                "Backup Nora",
+                "Save her connectome, dataset and conversation to a zip archive",
+                { noraBackupPicker.launch(com.prism.launcher.nora.NoraArchive.suggestedFileName()) }
+            ),
+            SettingItem.Nav(
+                "Import Nora",
+                "Restore everything from a Nora backup zip",
+                { noraImportPicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }
+            ),
+            SettingItem.Toggle(
+                "Denoising curriculum",
+                "Train on corrupted images and learn to recover the original — several times " +
+                    "more supervision per image, at no generation-time cost",
+                PrismSettings.getNoraDenoisingEnabled(this),
+                { PrismSettings.setNoraDenoisingEnabled(this, it) }
+            ),
+            SettingItem.Toggle(
+                "Connectome visualization",
+                "Live brain map during training. Renders on its own thread, but still costs " +
+                    "frames on a hot phone — turn it off if training feels sluggish",
+                PrismSettings.getNoraVisualizerEnabled(this),
+                { PrismSettings.setNoraVisualizerEnabled(this, it) }
+            ),
+            run {
+                val messagesActive = com.prism.launcher.nora.NoraAutoTrainWorker.messagesPageActive(this)
+                val exempt = com.prism.launcher.nora.NoraAutoTrainWorker.batteryExempt(this)
+                SettingItem.Toggle(
+                    "Autonomous training",
+                    when {
+                        !messagesActive ->
+                            "Add the Messages page to a desktop slot to enable this — Nora is " +
+                                "only reachable through it."
+                        !exempt ->
+                            "Retrain on her dataset periodically while the phone is idle. " +
+                                "Prism is not exempt from battery optimization, so Android will " +
+                                "likely refuse the background start — grant the exemption from " +
+                                "her training screen first."
+                        else ->
+                            "Retrain on her dataset periodically while the phone is idle. Holds " +
+                                "a wake lock and saturates the CPU while it runs."
+                    },
+                    PrismSettings.getNoraAutoTrainEnabled(this) && messagesActive,
+                    { enabled ->
+                        PrismSettings.setNoraAutoTrainEnabled(this, enabled)
+                        com.prism.launcher.nora.NoraAutoTrainWorker.schedule(this)
+                        adapter.setItems(buildItems())
+                    },
+                    isEnabled = messagesActive
+                )
+            },
+            run {
+                // 1..24, per spec. Presented in full so the user picks an hour rather than a
+                // bucket -- the setting only exists because ten hours is not right for everyone.
+                val hours = (1..24).toList()
+                val autoOn = PrismSettings.getNoraAutoTrainEnabled(this) &&
+                    com.prism.launcher.nora.NoraAutoTrainWorker.messagesPageActive(this)
+                SettingItem.Picker(
+                    "Autonomous training interval",
+                    if (autoOn)
+                        "How often an idle phone triggers a ${com.prism.launcher.nora.NoraConfig.AUTO_TRAIN_EPOCHS}-epoch run."
+                    else
+                        "Enable autonomous training to set how often it runs.",
+                    hours.map { "$it hour${if (it == 1) "" else "s"}" },
+                    hours.indexOf(PrismSettings.getNoraAutoTrainIntervalHours(this)).coerceAtLeast(0),
+                    { idx ->
+                        PrismSettings.setNoraAutoTrainIntervalHours(this, hours[idx])
+                        com.prism.launcher.nora.NoraAutoTrainWorker.schedule(this)
+                        adapter.setItems(buildItems())
+                    },
+                    isEnabled = autoOn
+                )
+            },
+
+            SettingItem.Header("Response Behavior"),
+            SettingItem.Toggle(
+                "Stream Responses",
+                "Show tokens as they're generated instead of waiting for the full reply",
+                PrismSettings.getStreamingEnabled(this),
+                {
+                    PrismSettings.setStreamingEnabled(this, it)
+                    adapter.setItems(buildItems())
+                }
+            ),
+            SettingItem.TextInput(
+                "Max Tokens",
+                "Cap on generated tokens per response. -1 = unlimited (generate until the model stops)",
+                PrismSettings.getMaxTokens(this).toString(),
+                { PrismSettings.setMaxTokens(this, it.toIntOrNull() ?: -1) },
+                isSingleLine = true
+            ),
+            SettingItem.Picker(
+                "KV Cache Compression",
+                "Compress conversation memory for GGUF models — trades a little accuracy for lower RAM use and longer context",
+                listOf("Off (Full Precision)", "Light (Q8, ~2x smaller)", "Max (Q4, ~4x smaller)"),
+                when (PrismSettings.getKvCacheQuant(this)) {
+                    PrismSettings.KV_CACHE_Q8_0 -> 1
+                    PrismSettings.KV_CACHE_Q4_0 -> 2
+                    else -> 0
+                },
+                {
+                    val value = when (it) {
+                        1 -> PrismSettings.KV_CACHE_Q8_0
+                        2 -> PrismSettings.KV_CACHE_Q4_0
+                        else -> PrismSettings.KV_CACHE_F16
+                    }
+                    PrismSettings.setKvCacheQuant(this, value)
+                    adapter.setItems(buildItems())
+                }
+            ),
+            SettingItem.Picker(
+                "AI Backend",
+                run {
+                    val base = "Force which backend AI text generation uses, for both GGUF and .task models. GPU is faster when well-supported (falls back to CPU automatically if it fails); switch to CPU if generation is slow or unstable on your device. GPU only speeds up Q4_0/Q8_0 GGUF quants — K-quants (e.g. Q2_K) always run on CPU regardless."
+                    if (com.prism.launcher.messaging.GgufInferenceService.hasHexagonSupport()) {
+                        "$base NPU (Qualcomm Hexagon) offloads to your device's neural processor for GGUF models."
+                    } else {
+                        "$base NPU isn't available in this build — it requires a Qualcomm Hexagon SDK at build time, which isn't configured here."
+                    }
+                },
+                run {
+                    val options = if (com.prism.launcher.messaging.GgufInferenceService.hasHexagonSupport()) {
+                        listOf("CPU", "GPU", "NPU")
+                    } else {
+                        listOf("CPU", "GPU")
+                    }
+                    options
+                },
+                PrismSettings.getAiBackend(this).coerceAtMost(
+                    (if (com.prism.launcher.messaging.GgufInferenceService.hasHexagonSupport()) 2 else 1)
+                ),
+                { idx ->
+                    PrismSettings.setAiBackend(this, idx)
+                    adapter.setItems(buildItems())
+                }
+            ),
+            run {
+                val intervalHours = listOf(1, 2, 4, 6, 12, 24)
+                val nebulaActive = SlotPreferences(this).getAssignments().any { it is SlotAssignment.NebulaSocial }
+                SettingItem.Picker(
+                    "Nebula Post Generation Interval",
+                    if (nebulaActive)
+                        "How often the background service invents new Nebula personas/posts using your AI model."
+                    else
+                        "Add the Nebula Social page to a desktop slot to enable background post generation.",
+                    intervalHours.map { "$it hour${if (it == 1) "" else "s"}" },
+                    intervalHours.indexOf(PrismSettings.getNebulaGenerationIntervalHours(this)).coerceAtLeast(0),
+                    { idx ->
+                        PrismSettings.setNebulaGenerationIntervalHours(this, intervalHours[idx])
+                        com.prism.launcher.social.SocialBotWorker.schedule(this)
+                        adapter.setItems(buildItems())
+                    },
+                    isEnabled = nebulaActive
+                )
+            },
 
             SettingItem.Header("Blocklist"),
             SettingItem.Nav(
@@ -767,6 +1016,39 @@ class SettingsActivity : PrismBaseActivity() {
                 "Load a .ttf or .otf file from storage",
                 { fontPicker.launch("*/*") },
                 isEnabled = PrismSettings.getFontStyle(this) == PrismSettings.FONT_STYLE_CUSTOM
+            ),
+
+            // ── OS Virtualization ────────────────────────────────────────────
+            SettingItem.Header("OS Virtualization"),
+            SettingItem.Toggle(
+                "Enable Virtualization",
+                "Route app launches through the virtualization page",
+                PrismSettings.getVirtualizationEnabled(this),
+                {
+                    PrismSettings.setVirtualizationEnabled(this, it)
+                    adapter.setItems(buildItems())
+                }
+            ),
+            SettingItem.Picker(
+                "Virtualization Mode",
+                "Select the OS to run in the virtualization page",
+                listOf("PrismOS (lightweight AOSP)", "Custom ISO"),
+                if (PrismSettings.getVirtualizationMode(this) == PrismSettings.VIRT_MODE_PRISM_OS) 0 else 1,
+                { idx ->
+                    PrismSettings.setVirtualizationMode(
+                        this,
+                        if (idx == 0) PrismSettings.VIRT_MODE_PRISM_OS else PrismSettings.VIRT_MODE_CUSTOM_ISO
+                    )
+                    adapter.setItems(buildItems())
+                },
+                isEnabled = PrismSettings.getVirtualizationEnabled(this)
+            ),
+            SettingItem.Nav(
+                "Select ISO File",
+                PrismSettings.getCustomIsoPath(this).ifBlank { "No file selected" },
+                { isoPicker.launch(arrayOf("application/octet-stream", "*/*")) },
+                isEnabled = PrismSettings.getVirtualizationEnabled(this) &&
+                    PrismSettings.getVirtualizationMode(this) == PrismSettings.VIRT_MODE_CUSTOM_ISO
             )
         )
     }
@@ -774,8 +1056,8 @@ class SettingsActivity : PrismBaseActivity() {
     private fun buildSlotPickers(): Array<SettingItem> {
         val prefs = SlotPreferences(this)
         val assignments = prefs.getAssignments()
-        val options = listOf("Browser", "Desktop Grid", "App Drawer", "Messaging", "Nebula Social", "Kinetic Halo", "File Explorer")
-        
+        val options = listOf("Browser", "Desktop Grid", "App Drawer", "Messaging", "Nebula Social", "Kinetic Halo", "File Explorer", "Models", "Agentic Tools")
+
         return assignments.mapIndexed { index, current ->
             val currentIdx = when(current) {
                 SlotAssignment.Browser -> 0
@@ -785,9 +1067,11 @@ class SettingsActivity : PrismBaseActivity() {
                 SlotAssignment.NebulaSocial -> 4
                 SlotAssignment.KineticHalo -> 5
                 SlotAssignment.FileExplorer -> 6
+                SlotAssignment.Models -> 7
+                SlotAssignment.AgenticTools -> 8
                 else -> 1 // Default to Desktop Grid
             }
-            
+
             SettingItem.Picker(
                 "Page ${index + 1} Content",
                 "Built-in page assigned to this slot",
@@ -802,6 +1086,8 @@ class SettingsActivity : PrismBaseActivity() {
                         4 -> SlotAssignment.NebulaSocial
                         5 -> SlotAssignment.KineticHalo
                         6 -> SlotAssignment.FileExplorer
+                        7 -> SlotAssignment.Models
+                        8 -> SlotAssignment.AgenticTools
                         else -> SlotAssignment.Default
                     }
                     prefs.setAt(index, assignment)
@@ -904,9 +1190,9 @@ class SettingsActivity : PrismBaseActivity() {
                     val t2 = view.findViewById<android.widget.TextView>(android.R.id.text2)
                     
                     t1.text = if (s.isActive) "● ${s.name} (ACTIVE)" else s.name
-                    t1.setTextColor(if (s.isActive) PrismSettings.getGlowColor(this@SettingsActivity) else android.graphics.Color.WHITE)
+                    t1.setTextColor(if (s.isActive) PrismSettings.getGlowColor(this@SettingsActivity) else androidx.core.content.ContextCompat.getColor(this@SettingsActivity, R.color.prism_text_primary))
                     t2.text = "${s.address}:${s.port} | User: ${s.username}"
-                    t2.setTextColor(android.graphics.Color.GRAY)
+                    t2.setTextColor(androidx.core.content.ContextCompat.getColor(this@SettingsActivity, R.color.prism_text_muted))
                     
                     view.setOnClickListener {
                         servers.forEach { it.isActive = false }
@@ -997,80 +1283,6 @@ class SettingsActivity : PrismBaseActivity() {
         )
     }
 
-    private fun startModelDiscovery() {
-        val categories = arrayOf("Generative", "Vision/Face", "Enhancement", "Unified (All)")
-        val categoryIds = arrayOf("generative", "vision", "enhancement", "all")
-        
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(40, 20, 40, 20)
-        }
-        
-        val searchInput = EditText(this).apply { 
-            hint = "Search query (e.g. flux, face, deep)" 
-            setTextColor(android.graphics.Color.WHITE)
-            setHintTextColor(android.graphics.Color.GRAY)
-        }
-        val categorySpinner = android.widget.Spinner(this).apply {
-            adapter = android.widget.ArrayAdapter(this@SettingsActivity, android.R.layout.simple_spinner_dropdown_item, categories)
-        }
-        
-        layout.addView(android.widget.TextView(this).apply { 
-            text = "AI Category"
-            setTextColor(android.graphics.Color.WHITE)
-        })
-        layout.addView(categorySpinner)
-        layout.addView(android.widget.TextView(this).apply { 
-            text = "Search Term"
-            setTextColor(android.graphics.Color.WHITE)
-        })
-        layout.addView(searchInput)
-
-        PrismDialogFactory.show(this, "Discovery Engine", "Find AI models from HuggingFace, GitHub, and Google.", onPositive = {
-            val query = searchInput.text.toString().trim().ifEmpty { "stable diffusion" }
-            val category = categoryIds[categorySpinner.selectedItemPosition]
-            performUniversalSearch(query, category)
-        }, customView = layout, positiveText = "Launch Scan")
-    }
-
-    private fun performUniversalSearch(query: String, category: String) {
-        val discoveryDialog = PrismDialogFactory.show(
-            this, "Crawling Mesh", "Searching multiple sources for '$query'...", 
-            showProgress = true, positiveText = null, negativeText = "Cancel"
-        )
-        
-        lifecycleScope.launch {
-            val models = ModelDiscoveryService.discoverAll(query, category)
-            discoveryDialog.dismiss()
-            
-            if (models.isEmpty()) {
-                Toast.makeText(this@SettingsActivity, "No models found for '$query'.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            
-            val modelNames = models.map { model -> 
-                "[${model.source}] ${model.name}\n${model.sizeLabel} • ${model.category.uppercase()}" 
-            }.toTypedArray()
-            
-            val listView = android.widget.ListView(this@SettingsActivity).apply {
-                adapter = android.widget.ArrayAdapter(this@SettingsActivity, android.R.layout.simple_list_item_1, modelNames)
-            }
-            
-            val selectionDialog = PrismDialogFactory.show(
-                this@SettingsActivity,
-                "Universal Mesh Discovery",
-                "Select a model to ingestion:",
-                customView = listView,
-                positiveText = null
-            )
-            
-            listView.setOnItemClickListener { _, _, position, _ ->
-                val selected = models[position]
-                selectionDialog.dismiss()
-                downloadModel(selected.name, selected.downloadUrl)
-            }
-        }
-    }
 }
 
 // ── Models & Adapter ────────────────────────────────────────────────────────

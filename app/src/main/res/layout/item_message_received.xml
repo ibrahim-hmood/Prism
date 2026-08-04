@@ -1,18 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="start"
     android:orientation="vertical"
-    android:paddingVertical="4dp">
+    android:paddingVertical="2dp">
 
     <LinearLayout
         android:id="@+id/messageBubble"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="64dp"
+        android:background="@drawable/bg_bubble_received"
         android:orientation="vertical"
-        android:padding="4dp">
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp">
 
         <FrameLayout
             android:id="@+id/mediaContainer"
@@ -50,11 +53,55 @@
             android:id="@+id/messageText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="10dp"
             android:text="Received message"
-            android:textColor="@android:color/white"
-            android:textSize="15sp" />
+            android:textColor="@color/prism_text_primary"
+            android:textSize="16sp" />
     </LinearLayout>
+
+    <!--
+        Nora's feedback row. Hidden on every other kind of received message, and on Nora's own
+        replies that produced no image — there is nothing to rate about a status readout.
+    -->
+    <LinearLayout
+        android:id="@+id/feedbackRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/feedbackUpBtn"
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:background="@drawable/bg_feedback_chip"
+            android:contentDescription="Good generation"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_thumb_up_24"
+            app:tint="?attr/prismTextSecondary" />
+
+        <ImageButton
+            android:id="@+id/feedbackDownBtn"
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_feedback_chip"
+            android:contentDescription="Bad generation"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_thumb_down_24"
+            app:tint="?attr/prismTextSecondary" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/messageTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginStart="4dp"
+        android:text="10:45 AM"
+        android:textColor="?attr/prismTextSecondary"
+        android:textSize="11sp" />
 
 </LinearLayout>

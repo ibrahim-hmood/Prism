@@ -1,19 +1,41 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:minSdkVersion="31" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:minSdkVersion="31" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:minSdkVersion="33" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Nora's training runs for hours. The wake lock keeps the CPU alive once the screen
+         turns off; without it a foreground service still pauses when the device suspends. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:ignore="BatteryLife" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Dictation in Messages and Nebula. Requested at the moment the mic is first tapped. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.MANAGE_VIRTUAL_MACHINE"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <intent>
@@ -22,6 +44,14 @@
         </intent>
         <intent>
             <action android:name="com.prism.launcher.action.DESKTOP_PAGE" />
+        </intent>
+        <!--
+            Required for dictation. From Android 11 the speech recognition service is invisible
+            to us without this, so SpeechRecognizer.isRecognitionAvailable() returns false and
+            createSpeechRecognizer() has nothing to bind to — the mic would simply never work.
+        -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 
@@ -38,6 +68,8 @@
 
         <activity
             android:name=".LauncherActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:clearTaskOnLaunch="false"
             android:exported="true"
             android:launchMode="singleTask"
@@ -70,45 +102,94 @@
         <!-- Settings -->
         <activity
             android:name=".SettingsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+        <activity
+            android:name=".ModelStoreActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+        <activity
+            android:name=".CloudModelsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings" />
 
         <!-- Blocklist Management -->
         <activity
             android:name=".BlocklistActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings" />
 
+
         <activity
             android:name=".vpn.WhitelistActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings" />
 
         <activity
             android:name=".browser.P2pDnsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings" />
 
         <activity
             android:name=".browser.P2pHostingActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings" />
 
         <activity
             android:name=".DiagnosticsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.PrismSettings" />
+
+        <!-- Nora: brain-based image and video generation -->
+        <activity
+            android:name=".nora.NoraTrainingActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.PrismSettings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Training and generation both run here, not in an activity, so a long run survives
+             the screen turning off, rotation, and the activity being destroyed. -->
+        <service
+            android:name=".nora.NoraService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Long-running on-device neural network training and image generation, initiated and monitored by the user." />
+        </service>
 
         <!-- Messaging Conversation -->
         <activity
             android:name=".messaging.ConversationActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".social.NebulaComposeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
             android:exported="false"
             android:theme="@style/Theme.PrismSettings"
             android:windowSoftInputMode="adjustResize" />
@@ -124,6 +205,45 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <!-- Access Points Portal -->
+        <activity
+            android:name=".accesspoint.AccessPointPortalActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+
+        <activity
+            android:name=".accesspoint.CreateAccessPointActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+
+        <activity
+            android:name=".accesspoint.ConnectedDevicesActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+
+        <activity
+            android:name=".accesspoint.AccessPointStatsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:exported="false"
+            android:theme="@style/Theme.PrismSettings" />
+
+        <!-- DNS Proxy Service for Access Points: listens on 0.0.0.0:53 -->
+        <service
+            android:name=".browser.DnsProxyService"
+            android:exported="false"
+            android:enabled="false"
+            android:description="@string/dns_proxy_service_description">
+        </service>
     </application>
 </manifest>
+
+
 

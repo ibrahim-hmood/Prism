@@ -12,6 +12,10 @@ sealed class SlotAssignment {
     data object FileExplorer : SlotAssignment()
     data object NebulaSocial : SlotAssignment()
     data class Custom(val packageName: String, val viewClassName: String) : SlotAssignment()
+    data object VirtualizationOs : SlotAssignment()
+    data object Models : SlotAssignment()
+    data object ModelStore : SlotAssignment()
+    data object AgenticTools : SlotAssignment()
 
     fun serialize(): String = when (this) {
         is Default -> "default"
@@ -22,6 +26,10 @@ sealed class SlotAssignment {
         is KineticHalo -> "halo"
         is FileExplorer -> "file_explorer"
         is NebulaSocial -> "social"
+        is VirtualizationOs -> "virtualization_os"
+        is Models -> "models"
+        is ModelStore -> "model_store"
+        is AgenticTools -> "agentic_tools"
         is Custom -> "custom|$packageName|$viewClassName"
     }
 
@@ -35,6 +43,10 @@ sealed class SlotAssignment {
             if (raw == "halo") return KineticHalo
             if (raw == "file_explorer") return FileExplorer
             if (raw == "social") return NebulaSocial
+            if (raw == "virtualization_os") return VirtualizationOs
+            if (raw == "models") return Models
+            if (raw == "model_store") return ModelStore
+            if (raw == "agentic_tools") return AgenticTools
             val parts = raw.split("|")
             if (parts.size == 3 && parts[0] == "custom") {
                 return Custom(parts[1], parts[2])

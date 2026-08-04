@@ -66,6 +66,7 @@ class DiagnosticsActivity : PrismBaseActivity() {
                 PrismLogger.Level.WARN -> Color.parseColor("#FCE94F")    // Yellow
                 PrismLogger.Level.SUCCESS -> Color.parseColor("#8AE234") // Green
                 PrismLogger.Level.INFO -> Color.WHITE
+                PrismLogger.Level.DEBUG -> Color.GRAY
             }
             
             // Build stylized Ubuntu-like prompt: prism@mesh:~$ message

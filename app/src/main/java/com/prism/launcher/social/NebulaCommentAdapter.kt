@@ -8,7 +8,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.prism.launcher.databinding.ItemSocialCommentBinding
 
 class NebulaCommentAdapter(
-    private val onProfileClick: (String) -> Unit
+    private val onProfileClick: (String) -> Unit,
+    private val onCommentClick: (SocialCommentEntity) -> Unit = {}
 ) : ListAdapter<SocialCommentEntity, NebulaCommentAdapter.VH>(DiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -20,8 +21,9 @@ class NebulaCommentAdapter(
         val comment = getItem(position)
         holder.binding.commentAuthorName.text = comment.authorName
         holder.binding.commentContent.text = comment.content
-        
+
         holder.binding.commentAvatar.setOnClickListener { onProfileClick(comment.authorId) }
+        holder.itemView.setOnClickListener { onCommentClick(comment) }
     }
 
     class VH(val binding: ItemSocialCommentBinding) : RecyclerView.ViewHolder(binding.root)

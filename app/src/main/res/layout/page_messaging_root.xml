@@ -3,60 +3,61 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"
+    android:background="?attr/prismBackground"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="12dp">
+        android:paddingHorizontal="20dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="8dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Messages"
-            android:textColor="@color/prism_text_primary"
-            android:textSize="28sp"
-            android:fontFamily="sans-serif-medium" />
+            android:textColor="?attr/prismTextPrimary"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif" />
     </RelativeLayout>
 
-    <!-- Messaging Search Box -->
+    <!-- Messaging Search Box (iOS-style flat pill, no glow) -->
     <FrameLayout
         android:id="@+id/messagingSearchContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:padding="8dp">
+        android:layout_marginBottom="4dp">
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/messagingSearchLayout"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:boxBackgroundColor="#1AFFFFFF"
-            app:boxCornerRadiusBottomEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusTopStart="16dp"
+            app:boxBackgroundColor="?attr/prismDivider"
+            app:boxCornerRadiusBottomEnd="20dp"
+            app:boxCornerRadiusBottomStart="20dp"
+            app:boxCornerRadiusTopEnd="20dp"
+            app:boxCornerRadiusTopStart="20dp"
             app:boxStrokeWidth="0dp"
             app:boxStrokeWidthFocused="0dp"
             app:hintEnabled="false"
             app:startIconDrawable="@drawable/ic_search_24"
-            app:startIconTint="@color/prism_text_muted">
+            app:startIconTint="?attr/prismTextSecondary">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/messagingSearchInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Search messages..."
+                android:hint="Search"
                 android:inputType="text"
                 android:paddingVertical="10dp"
-                android:textColor="@color/prism_text_primary"
-                android:textColorHint="@color/prism_text_muted"
-                android:textSize="14sp" />
+                android:textColor="?attr/prismTextPrimary"
+                android:textColorHint="?attr/prismTextSecondary"
+                android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>
     </FrameLayout>
 

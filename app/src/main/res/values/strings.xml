@@ -30,4 +30,12 @@
     <string name="vpn_channel_name">Private browsing</string>
     <string name="vpn_notification_title">Prism private DNS</string>
     <string name="vpn_notification_text">Private tabs: DNS filtering plus IPv4 /32 sinks for resolved blocklist hosts (drops TCP/UDP/ICMP to those IPs).</string>
+    <string name="dns_proxy_service_description">P2P DNS proxy for access points (listens on port 53)</string>
+    <string name="slot_virtualization_os">OS Virtualization</string>
+    <string name="virt_status_booting">Booting…</string>
+    <string name="virt_status_running">Running</string>
+    <string name="virt_status_paused">Paused</string>
+    <string name="virt_status_stopped">Stopped</string>
+    <string name="virt_status_error">Error — tap power to retry</string>
+    <string name="virt_not_supported">Virtualization not supported on this device</string>
 </resources>

@@ -31,7 +31,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Name"
-                android:textColor="@color/social_text_main"
+                android:textColor="@color/social_card_text"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -51,7 +51,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="This is an AI comment responding to the brilliance of the post."
-            android:textColor="@color/social_text_main"
+            android:textColor="@color/social_card_text"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/commentReplyHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Reply"
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>

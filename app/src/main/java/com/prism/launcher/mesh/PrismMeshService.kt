@@ -168,6 +168,7 @@ object PrismMeshService {
             0x09.toByte() -> handleDnsSyncResp(peerIp, payload)
             0x0A.toByte() -> handleDiscoveryReq(peerIp, payload)
             0x0B.toByte() -> handleHeartbeatResp(peerIp, payload)
+            P2pModelRegistry.OPCODE_MODEL_ANNOUNCE -> handleModelAnnounce(payload, peerIp)
         }
     }
 
@@ -219,6 +220,14 @@ object PrismMeshService {
                 }
             } catch (e: Exception) {}
         }
+    }
+
+    private fun handleModelAnnounce(payload: String, peerIp: String) {
+        try {
+            val json = JSONObject(payload)
+            val modelName = json.optString("model", "")
+            P2pModelRegistry.ingestFromPeer(peerIp, modelName)
+        } catch (e: Exception) {}
     }
 
     private fun handleDnsWrite(payload: String, sourceIp: String) {

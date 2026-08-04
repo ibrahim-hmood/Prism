@@ -7,12 +7,25 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.prism.launcher.databinding.ItemSocialMessageIncomingBinding
 import com.prism.launcher.databinding.ItemSocialMessageOutgoingBinding
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class NebulaChatAdapter : ListAdapter<SocialMessageEntity, RecyclerView.ViewHolder>(DiffCallback()) {
+
+    private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
+    /** Display name used for the "<name> is thinking..." placeholder row, set by the caller. */
+    var thinkingBotName: String = "Bot"
 
     companion object {
         private const val TYPE_INCOMING = 0
         private const val TYPE_OUTGOING = 1
+
+        /** Sentinel id for the pre-first-token "is thinking..." animated placeholder row. */
+        const val THINKING_ID = -1L
+
+        /** Sentinel id for a live-streaming row with real content (reasoning or answer) — plain text, not animated. */
+        const val LIVE_ID = -2L
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -32,8 +45,22 @@ class NebulaChatAdapter : ListAdapter<SocialMessageEntity, RecyclerView.ViewHold
         val msg = getItem(position)
         if (holder is OutgoingVH) {
             holder.binding.messageText.text = msg.content
+            holder.binding.messageTime.text = timeFormat.format(msg.timestamp)
         } else if (holder is IncomingVH) {
-            holder.binding.messageText.text = msg.content
+            if (msg.id == THINKING_ID) {
+                com.prism.launcher.messaging.ThinkingTextAnimator.start(holder.binding.messageText, thinkingBotName)
+            } else {
+                com.prism.launcher.messaging.ThinkingTextAnimator.stop(holder.binding.messageText)
+                holder.binding.messageText.text = msg.content
+            }
+            holder.binding.messageTime.text = timeFormat.format(msg.timestamp)
+        }
+    }
+
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        super.onViewRecycled(holder)
+        if (holder is IncomingVH) {
+            com.prism.launcher.messaging.ThinkingTextAnimator.stop(holder.binding.messageText)
         }
     }
 
